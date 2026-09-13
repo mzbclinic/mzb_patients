@@ -93,6 +93,11 @@
     font-size:15px; background:var(--paper); color:var(--ink);
   }
   .login-field input{ letter-spacing:4px; font-variant-numeric:tabular-nums; }
+  .login-remember{
+    display:flex; align-items:center; gap:8px; margin:-2px 0 16px; font-size:13px; color:var(--ink-soft);
+  }
+  .login-remember input{ width:auto; margin:0; }
+  .login-remember label{ cursor:pointer; user-select:none; }
   .login-error{ color:var(--warn); font-size:13px; margin:-4px 0 12px; min-height:0; display:none; }
   .login-error.show{ display:block; }
   .login-submit{
@@ -386,6 +391,10 @@
       <input id="loginPin" type="password" inputmode="numeric" maxlength="8" placeholder="••••" autocomplete="off">
     </div>
     <div class="login-error" id="loginError"></div>
+    <div class="login-remember">
+      <input type="checkbox" id="rememberMe">
+      <label for="rememberMe">이 기기에서 로그인 상태 유지 (자동 로그인)</label>
+    </div>
     <button class="login-submit" id="loginSubmit">로그인</button>
     <div class="login-config-note" id="loginConfigNote"></div>
   </div>
@@ -533,7 +542,7 @@
   /* ================= 구글시트 연동 설정 ================= */
   // Apps Script 배포 후 나오는 "웹 앱 URL"을 아래 따옴표 안에 붙여넣으세요.
   // 예: "https://script.google.com/macros/s/AKfycb.../exec"
-  var SHEETS_API_URL = "https://script.google.com/macros/s/AKfycbxym6_hTc9P2olvGqg_uSKkq2t7nboh5BD2t8SdeIVG8YtfOS0hF4WZ6H-aBJ1GdDQH4A/exec";
+  var SHEETS_API_URL = "PUT_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
   var SESSION_KEY = "yonsei-checklist-session";
   var SESSION = null; // { token, name, role }
 
@@ -543,10 +552,10 @@
       return raw ? JSON.parse(raw) : null;
     }catch(e){ return null; }
   }
-  function saveSession(sess){
+  function saveSession(sess, remember){
     SESSION = sess;
     try{
-      if(sess) localStorage.setItem(SESSION_KEY, JSON.stringify(sess));
+      if(sess && remember) localStorage.setItem(SESSION_KEY, JSON.stringify(sess));
       else localStorage.removeItem(SESSION_KEY);
     }catch(e){}
   }
@@ -619,6 +628,13 @@
   function fmtFull(dateStr){
     var p = dateStr.split("-");
     return p[0] + "." + p[1] + "." + p[2];
+  }
+  var WEEKDAY_KR = ["일","월","화","수","목","금","토"];
+  function fmtMDWeekday(dateStr){
+    var p = dateStr.split("-");
+    var d = new Date(dateStr + "T00:00:00");
+    var wd = isNaN(d.getTime()) ? "" : WEEKDAY_KR[d.getDay()];
+    return p[1] + p[2] + (wd ? "("+wd+")" : "");
   }
   function uid(prefix){ return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
@@ -2018,10 +2034,6 @@
           var nurseVal = tf.nurse === "__none__" ? "" : tf.nurse;
           if((v.nurse||"") !== nurseVal) return false;
         }
-        if(tf.bloodTest){
-          var bVal = tf.bloodTest === "yes";
-          if(!!v.bloodTest !== bVal) return false;
-        }
         if(tf.mintVisit){
           var mVal = tf.mintVisit === "yes";
           if(!!v.mintVisit !== mVal) return false;
@@ -2053,7 +2065,7 @@
 
     html += '<div class="assign-table-wrap"><table class="assign-table visit-table"><thead><tr>' +
       '<th>연번</th><th>방문일자</th><th>방문번호</th><th>이름</th><th>방문유형</th><th>방문간호사</th>' +
-      '<th>간호메모</th><th>혈액검사</th><th>비고</th><th>MINT<br>일방시</th><th></th>' +
+      '<th>간호메모</th><th>LAB</th><th>비고</th><th>MINT<br>일방시</th>' +
     '</tr>' +
     buildFilterHeaderRow("visits", [
       { key:"seq", type:"none" },
@@ -2063,29 +2075,27 @@
       { key:"visitType", type:"select", options: VISIT_TYPES.map(function(t){ return {value:t,label:t}; }) },
       { key:"nurse", type:"select", options: [{value:"__none__",label:"미기재"}].concat(S.staff.map(function(n){ return {value:n,label:n}; })) },
       { key:"memo", type:"none" },
-      { key:"bloodTest", type:"select", options:[{value:"yes",label:"O"},{value:"no",label:"-"}] },
+      { key:"bloodTest", type:"none" },
       { key:"note", type:"none" },
-      { key:"mintVisit", type:"select", options:[{value:"yes",label:"O"},{value:"no",label:"-"}] },
-      { key:"_actions", type:"none" }
+      { key:"mintVisit", type:"select", options:[{value:"yes",label:"O"},{value:"no",label:"-"}] }
     ]) +
     '</thead><tbody>';
 
     if(list.length === 0){
-      html += '<tr><td colspan="11" style="text-align:center;color:var(--ink-soft);padding:24px;">이 달에 등록된 방문 기록이 없습니다.</td></tr>';
+      html += '<tr><td colspan="10" style="text-align:center;color:var(--ink-soft);padding:24px;">이 달에 등록된 방문 기록이 없습니다.</td></tr>';
     } else {
       list.forEach(function(v, idx){
         html += '<tr>' +
           '<td style="color:var(--ink-soft);font-variant-numeric:tabular-nums;">'+(idx+1)+'</td>' +
-          '<td>'+escapeHtml(v.date)+'</td>' +
+          '<td style="font-variant-numeric:tabular-nums;white-space:nowrap;">'+escapeHtml(fmtMDWeekday(v.date))+'</td>' +
           '<td style="font-variant-numeric:tabular-nums;">'+escapeHtml(v.visitNo)+'</td>' +
-          '<td style="font-weight:600;">'+escapeHtml(v.name)+'</td>' +
+          '<td style="font-weight:600;cursor:pointer;" data-act="editvisit" data-vid="'+v.id+'" title="더블클릭하면 수정할 수 있습니다">'+escapeHtml(v.name)+'</td>' +
           '<td>'+renderVisitTypeBadge(v.visitType||"")+'</td>' +
           '<td>'+renderVisitNurseBadge(v.nurse||"")+'</td>' +
           '<td class="memo-cell"><textarea class="inline-edit" rows="1" data-act="editmemo" data-vid="'+v.id+'" placeholder="메모">'+escapeHtml(v.memo||"")+'</textarea></td>' +
           '<td>'+(v.bloodTest ? '<input type="checkbox" class="chk" data-act="toggleblood" data-vid="'+v.id+'" checked>' : '<input type="checkbox" class="chk" data-act="toggleblood" data-vid="'+v.id+'">')+'</td>' +
           '<td class="memo-cell"><textarea class="inline-edit" rows="1" data-act="editnote" data-vid="'+v.id+'" placeholder="비고">'+escapeHtml(v.note||"")+'</textarea></td>' +
           '<td>'+(v.mintVisit ? '<input type="checkbox" class="chk" data-act="togglemint" data-vid="'+v.id+'" checked>' : '<input type="checkbox" class="chk" data-act="togglemint" data-vid="'+v.id+'">')+'</td>' +
-          '<td><button class="btn btn-sm" data-act="editvisit" data-vid="'+v.id+'">수정</button></td>' +
         '</tr>';
       });
     }
@@ -2111,8 +2121,8 @@
         renderVisitsView();
       });
     }
-    el.querySelectorAll('[data-act="editvisit"]').forEach(function(btn){
-      btn.addEventListener("click", function(){ openVisitModal(null, btn.getAttribute("data-vid")); });
+    el.querySelectorAll('[data-act="editvisit"]').forEach(function(cell){
+      cell.addEventListener("dblclick", function(){ openVisitModal(null, cell.getAttribute("data-vid")); });
     });
     el.querySelectorAll('[data-act="togglemint"]').forEach(function(chk){
       chk.addEventListener("click", async function(ev){ ev.stopPropagation(); });
@@ -3895,7 +3905,8 @@
       try{
         var r = await apiCall("login", { name: name, pin: pin });
         if(r && r.ok){
-          saveSession({ token: r.token, name: r.name, role: r.role });
+          var remember = document.getElementById("rememberMe").checked;
+          saveSession({ token: r.token, name: r.name, role: r.role }, remember);
           startApp();
         } else {
           showLoginError((r && r.message) || "로그인에 실패했습니다.");
