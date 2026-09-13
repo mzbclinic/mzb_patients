@@ -321,6 +321,16 @@
   }
   .checklist-subsection-header.sub-assigned{ border-color:var(--home); color:var(--home); background:var(--home-soft); }
   .checklist-subsection-header.sub-unassigned{ border-color:var(--visit-text); color:var(--visit-text); background:var(--paper); }
+  .checklist-two-col{ display:flex; gap:14px; align-items:flex-start; }
+  .checklist-col{ flex:1 1 0; min-width:0; border-radius:8px; padding:6px 8px 10px; }
+  .checklist-col.col-assigned{ background:var(--home-soft); }
+  .checklist-col.col-unassigned{ background:var(--visit); }
+  .checklist-col .checklist-subsection-header{ margin-top:2px; }
+  @media (max-width:680px){
+    .checklist-two-col{ flex-direction:column; }
+  }
+  .virtual-patient{ border-style:dashed; }
+  .virtual-patient .patient-head{ cursor:default; }
   .checklist-section-divider{
     height:1px; background:var(--line); margin:18px 0 10px;
     position:relative;
@@ -330,6 +340,7 @@
     background:var(--paper); color:var(--ink-soft); font-size:11px; padding:0 10px;
   }
   .proxy-note{ font-weight:600; color:var(--warn); font-size:10.5px; background:var(--warn-soft); padding:1px 7px; border-radius:10px; }
+  .mint-by{ font-size:10px; color:var(--ink-soft); cursor:pointer; text-decoration:underline dotted; margin-left:2px; white-space:nowrap; }
 
   /* ---------- 상단 탭 ---------- */
   .apptabs{ display:flex; gap:8px; max-width:760px; margin:0 auto; padding:12px 14px 0; }
@@ -606,6 +617,7 @@
     bloodTests: [],
     checklistTopSearch: "",
     visitStatsOpen: false,
+    mintStatsOpen: false,
     dashboardCategory: null, // 재택/일방시/장주사 상황판 중 어떤 게 펼쳐져 있는지
     // 탭별·열별 필터 상태 (엑셀 자동필터처럼 각 표마다 독립적으로 유지됨)
     tableFilters: {
@@ -861,7 +873,8 @@
       if(typeof p.name !== "string"){ p.name = p.name ? String(p.name) : ""; patientsChanged = true; }
     });
 
-    S.who = (lastName && (lastName === "전체" || S.staff.indexOf(lastName) !== -1)) ? lastName : "전체";
+    // 실제 로그인(PIN 인증)된 이름을 기본값으로 사용합니다. (예전의 "마지막 선택 이름 자동적용" 방식은 더 이상 신원 판단에 쓰지 않음)
+    S.who = (SESSION && SESSION.name) ? SESSION.name : ((lastName && (lastName === "전체" || S.staff.indexOf(lastName) !== -1)) ? lastName : "전체");
 
     // 환자별 상태: 통합 키가 있으면 그대로 사용. 없는(이관 전) 경우에만 예전 방식으로 1회 개별 조회.
     if(allStates && typeof allStates === "object"){
@@ -1884,12 +1897,12 @@
   }
 
   // 방문유형 고정 선택지 (탭 간 색상 일관성을 위해 정확히 일치하는 값만 사용)
-  var VISIT_TYPES = ["재택포괄", "재택정기방문", "단독간호", "추가간호", "일방시", "장주사의간동반", "장주사단독간호"];
+  var VISIT_TYPES = ["재택포괄", "재택정기방문", "단독간호", "추가간호", "일방시", "일방시(의사단독)", "장주사의간동반", "장주사단독간호"];
 
   // 방문유형이 어느 구분(재택/일방시/장주사)에 해당하는지 매핑 (체크리스트에 언제 구분 블록을 보여줄지 판단용)
   var VISIT_TYPE_TO_CATEGORY = {
     "재택포괄": "재택", "재택정기방문": "재택", "단독간호": "재택", "추가간호": "재택",
-    "일방시": "일방시",
+    "일방시": "일방시", "일방시(의사단독)": "일방시",
     "장주사의간동반": "장주사", "장주사단독간호": "장주사"
   };
   // 이번달 방문목록에 그 구분(cat)에 해당하는 방문이 실제로 있었는지
@@ -1908,6 +1921,7 @@
     "단독간호": ["단독간호"],
     "추가간호": ["추가간호"],
     "일방시": ["동의서", "방문", "MINT 일방시"],
+    "일방시(의사단독)": ["동의서", "방문", "MINT 일방시"],
     "장주사의간동반": ["동의서", "장주서식"],
     "장주사단독간호": ["동의서", "장주서식"]
   };
@@ -1948,6 +1962,7 @@
     "단독간호": { bg:"var(--solo)", color:"var(--solo-text)" },
     "추가간호": { bg:"var(--extra)", color:"var(--extra-text)" },
     "일방시": { bg:"var(--visit)", color:"var(--visit-text)" },
+    "일방시(의사단독)": { bg:"var(--visit)", color:"var(--visit-text)" },
     "장주사의간동반": { bg:"var(--disability)", color:"var(--disability-text)" },
     "장주사단독간호": { bg:"var(--disability)", color:"var(--disability-text)" }
   };
@@ -2021,6 +2036,59 @@
     return html;
   }
 
+  // 일방시 계열 방문 입력통계 + MINT 일방시 체크 현황 (관리자 전용)
+  var VISIT_TYPES_ONE_WAY = ["일방시", "일방시(의사단독)"];
+  function buildMintStatsHtml(){
+    var relevant = S.visits.filter(function(v){ return VISIT_TYPES_ONE_WAY.indexOf(v.visitType) !== -1; });
+    var total = relevant.length;
+    var checkedCount = relevant.filter(function(v){ return v.mintVisit; }).length;
+
+    var byNurse = {};
+    relevant.forEach(function(v){
+      var n = v.nurse || "미기재";
+      byNurse[n] = (byNurse[n] || 0) + 1;
+    });
+    var nurseNames = Object.keys(byNurse).sort(function(a,b){ return a.localeCompare(b,"ko"); });
+
+    var byChecker = {};
+    relevant.forEach(function(v){
+      if(v.mintVisit){
+        var c = v.mintCheckedBy || "미지정";
+        byChecker[c] = (byChecker[c] || 0) + 1;
+      }
+    });
+    var checkerNames = Object.keys(byChecker).sort(function(a,b){ return a.localeCompare(b,"ko"); });
+
+    var html = '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;">';
+
+    html += '<div class="assign-table-wrap" style="flex:1;min-width:220px;">' +
+      '<div style="padding:10px 12px;font-weight:700;font-size:13px;">일방시 입력 건수 <span style="font-weight:400;color:var(--ink-soft);font-size:12px;">(전체 '+total+'건)</span></div>' +
+      '<table class="assign-table"><thead><tr><th>간호사</th><th>입력 건수</th></tr></thead><tbody>';
+    if(nurseNames.length === 0){
+      html += '<tr><td colspan="2" style="text-align:center;color:var(--ink-soft);padding:16px;">이 달에 일방시 방문이 없습니다.</td></tr>';
+    } else {
+      nurseNames.forEach(function(n){
+        html += '<tr><td style="font-weight:600;">'+escapeHtml(n)+'</td><td style="text-align:center;">'+byNurse[n]+'</td></tr>';
+      });
+    }
+    html += '</tbody></table></div>';
+
+    html += '<div class="assign-table-wrap" style="flex:1;min-width:220px;">' +
+      '<div style="padding:10px 12px;font-weight:700;font-size:13px;">MINT 일방시 체크 현황 <span style="font-weight:400;color:var(--ink-soft);font-size:12px;">(전체 '+total+'건 중 '+checkedCount+'건 체크됨)</span></div>' +
+      '<table class="assign-table"><thead><tr><th>체크한 사람</th><th>체크 건수</th></tr></thead><tbody>';
+    if(checkerNames.length === 0){
+      html += '<tr><td colspan="2" style="text-align:center;color:var(--ink-soft);padding:16px;">이 달에 MINT 체크된 건이 없습니다.</td></tr>';
+    } else {
+      checkerNames.forEach(function(c){
+        html += '<tr><td style="font-weight:600;">'+escapeHtml(c)+'</td><td style="text-align:center;">'+byChecker[c]+'</td></tr>';
+      });
+    }
+    html += '</tbody></table></div>';
+
+    html += '</div>';
+    return html;
+  }
+
   function renderVisitsView(){
     var el = document.getElementById("visitsView");
     if(!el) return;
@@ -2055,12 +2123,16 @@
       '<h2>방문 기록 <span style="font-weight:400;color:var(--ink-soft);font-size:12.5px;">(총 '+list.length+'건)</span></h2>' +
       '<div style="display:flex;gap:8px;">' +
         (S.adminMode ? '<button class="btn btn-sm" id="toggleVisitStats">'+(S.visitStatsOpen?"방문통계 닫기":"간호사별 방문통계")+'</button>' : '') +
+        (S.adminMode ? '<button class="btn btn-sm" id="toggleMintStats">'+(S.mintStatsOpen?"일방시 통계 닫기":"일방시 입력통계")+'</button>' : '') +
         '<button class="btn btn-teal" id="addVisitBtn">+ 새 방문 등록</button>' +
       '</div>' +
     '</div>';
 
     if(S.adminMode && S.visitStatsOpen){
       html += buildNurseVisitStatsHtml();
+    }
+    if(S.adminMode && S.mintStatsOpen){
+      html += buildMintStatsHtml();
     }
 
     html += '<div class="assign-table-wrap"><table class="assign-table visit-table"><thead><tr>' +
@@ -2092,10 +2164,12 @@
           '<td style="font-weight:600;cursor:pointer;" data-act="editvisit" data-vid="'+v.id+'" title="더블클릭하면 수정할 수 있습니다">'+escapeHtml(v.name)+'</td>' +
           '<td>'+renderVisitTypeBadge(v.visitType||"")+'</td>' +
           '<td>'+renderVisitNurseBadge(v.nurse||"")+'</td>' +
-          '<td class="memo-cell"><textarea class="inline-edit" rows="1" data-act="editmemo" data-vid="'+v.id+'" placeholder="메모">'+escapeHtml(v.memo||"")+'</textarea></td>' +
+          '<td class="memo-cell"><textarea class="inline-edit" rows="1" data-act="editmemo" data-vid="'+v.id+'">'+escapeHtml(v.memo||"")+'</textarea></td>' +
           '<td>'+(v.bloodTest ? '<input type="checkbox" class="chk" data-act="toggleblood" data-vid="'+v.id+'" checked>' : '<input type="checkbox" class="chk" data-act="toggleblood" data-vid="'+v.id+'">')+'</td>' +
-          '<td class="memo-cell"><textarea class="inline-edit" rows="1" data-act="editnote" data-vid="'+v.id+'" placeholder="비고">'+escapeHtml(v.note||"")+'</textarea></td>' +
-          '<td>'+(v.mintVisit ? '<input type="checkbox" class="chk" data-act="togglemint" data-vid="'+v.id+'" checked>' : '<input type="checkbox" class="chk" data-act="togglemint" data-vid="'+v.id+'">')+'</td>' +
+          '<td class="memo-cell"><textarea class="inline-edit" rows="1" data-act="editnote" data-vid="'+v.id+'">'+escapeHtml(v.note||"")+'</textarea></td>' +
+          '<td>'+(v.mintVisit ? '<input type="checkbox" class="chk" data-act="togglemint" data-vid="'+v.id+'" checked>' : '<input type="checkbox" class="chk" data-act="togglemint" data-vid="'+v.id+'">')+
+            (S.adminMode && v.mintVisit ? ' <span class="mint-by" data-act="editmintby" data-vid="'+v.id+'" title="클릭하면 체크한 사람을 바꿀 수 있습니다">'+escapeHtml(v.mintCheckedBy||"미지정")+'</span>' : '') +
+          '</td>' +
         '</tr>';
       });
     }
@@ -2121,6 +2195,13 @@
         renderVisitsView();
       });
     }
+    var mintStatsBtn = document.getElementById("toggleMintStats");
+    if(mintStatsBtn){
+      mintStatsBtn.addEventListener("click", function(){
+        S.mintStatsOpen = !S.mintStatsOpen;
+        renderVisitsView();
+      });
+    }
     el.querySelectorAll('[data-act="editvisit"]').forEach(function(cell){
       cell.addEventListener("dblclick", function(){ openVisitModal(null, cell.getAttribute("data-vid")); });
     });
@@ -2131,8 +2212,29 @@
         var v = S.visits.find(function(x){ return x.id === vid; });
         if(!v) return;
         v.mintVisit = e.target.checked;
+        if(v.mintVisit){
+          v.mintCheckedBy = (SESSION && SESSION.name) ? SESSION.name : (S.who || "미지정");
+        } else {
+          delete v.mintCheckedBy;
+        }
         await saveVisitsForMonth(S.visitLogYear, S.visitLogMonth, S.visits);
         showToast(v.mintVisit ? "MINT 일방시 체크되었습니다." : "MINT 일방시 체크 해제되었습니다.");
+        renderVisitsView();
+      });
+    });
+    el.querySelectorAll('[data-act="editmintby"]').forEach(function(span){
+      span.addEventListener("click", async function(ev){
+        ev.stopPropagation();
+        var vid = span.getAttribute("data-vid");
+        var v = S.visits.find(function(x){ return x.id === vid; });
+        if(!v) return;
+        var options = S.staff.map(function(n){ return {value:n, label:n}; });
+        var chosen = await showSelectPrompt("MINT 일방시를 체크한 사람", options, v.mintCheckedBy || "");
+        if(chosen === null) return;
+        v.mintCheckedBy = chosen;
+        await saveVisitsForMonth(S.visitLogYear, S.visitLogMonth, S.visits);
+        showToast("체크한 사람이 수정되었습니다.");
+        renderVisitsView();
       });
     });
     el.querySelectorAll('[data-act="toggleblood"]').forEach(function(chk){
@@ -2417,7 +2519,7 @@
           '<td style="font-weight:600;">'+escapeHtml(b.name||"")+'</td>' +
           '<td>'+escapeHtml(b.type||"")+'</td>' +
           '<td>'+statusTag+'</td>' +
-          '<td class="memo-cell"><input type="text" class="inline-edit" data-act="editbloodnote" data-bid="'+b.id+'" value="'+escapeHtml(b.note||"")+'" placeholder="비고"></td>' +
+          '<td class="memo-cell"><input type="text" class="inline-edit" data-act="editbloodnote" data-bid="'+b.id+'" value="'+escapeHtml(b.note||"")+'"></td>' +
           '<td><button class="btn btn-sm" data-act="editblood" data-bid="'+b.id+'">수정</button></td>' +
         '</tr>';
       });
@@ -2639,7 +2741,7 @@
   }
   // 방문유형에 따라 어느 구분·그룹의 "방문 날짜" 로그에 자동으로 반영할지
   function getSyncTargetForVisitType(visitType){
-    if(visitType === "일방시") return { cat:"일방시", group:"방문" };
+    if(visitType === "일방시" || visitType === "일방시(의사단독)") return { cat:"일방시", group:"방문" };
     if(visitType === "추가간호") return { cat:"재택", group:"추가간호" };
     return null;
   }
@@ -2798,7 +2900,8 @@
     var st = ensurePatientState(pid);
     if(!st.items[key]) st.items[key] = {};
     if(checked){
-      st.items[key][mkey] = { checked:true, date: todayStr(), by: S.who || "미지정" };
+      var byName = (SESSION && SESSION.name) ? SESSION.name : (S.who || "미지정");
+      st.items[key][mkey] = { checked:true, date: todayStr(), by: byName };
     } else {
       delete st.items[key][mkey];
     }
@@ -3091,7 +3194,6 @@
         '<span class="patient-id">#'+escapeHtml(p.no||"")+'</span>' +
         '<span class="patient-name">'+escapeHtml(p.name)+'</span>' +
         '<span class="patient-badges">'+badges+'</span>' +
-        '<span class="patient-nurse">'+escapeHtml(p.nurse||"미배정")+(p.location?(' · '+escapeHtml(p.location)):"")+'</span>' +
       '</div>' +
       '<div class="patient-body">' + body +
         '<div style="padding:10px 14px;display:flex;gap:8px;">' +
@@ -3107,6 +3209,70 @@
     if(!list || !p.no) return false;
     return list.some(function(v){ return String(v.no) === String(p.no); });
   }
+  // 담당간호사가 아니더라도, 이번달에 그 간호사가 실제로 이 환자를 방문했는지
+  function hasVisitByNurseThisMonth(p, nurseName, mkey){
+    var list = S.visitsCache[mkey];
+    if(!list || !p.no || !nurseName) return false;
+    return list.some(function(v){ return String(v.no) === String(p.no) && v.nurse === nurseName; });
+  }
+  // 현재 선택된 간호사 보기(S.who) 기준으로 체크리스트에 노출할 기본 환자 목록을 구성합니다.
+  // - 전체/의사(전용우) 보기: 등록된 모든 환자
+  // - 특정 간호사 보기: 그 간호사가 담당인 환자 + (담당은 아니지만 이번달 그 간호사가 실제로 방문한 환자)
+  function buildChecklistBaseList(mkey){
+    if(S.who === "전체" || S.who === DOCTOR_NAME){
+      return S.patients.filter(isPatientVisibleForCurrentView);
+    }
+    return S.patients.filter(function(p){
+      if(!isPatientVisibleForCurrentView(p)) return false;
+      if(p.nurse === S.who) return true;
+      if(!p.nurse && hasVisitByNurseThisMonth(p, S.who, mkey)) return true;
+      return false;
+    });
+  }
+
+  // 환자배정(S.patients)에 아예 등록되어 있지 않은데, 이번달 방문목록에는 기록이 있는 사람들
+  // (등록번호 기준으로 중복 제거). S.who가 특정 간호사면 그 간호사가 실제로 방문한 경우만.
+  function getOrphanVisitsThisMonth(mkey){
+    var list = S.visitsCache[mkey];
+    if(!list) return [];
+    var isSpecificNurse = (S.who !== "전체" && S.who !== DOCTOR_NAME);
+    var seen = {};
+    var result = [];
+    list.forEach(function(v){
+      if(!v.no) return;
+      var registered = S.patients.some(function(p){ return String(p.no) === String(v.no); });
+      if(registered) return;
+      if(isSpecificNurse && v.nurse !== S.who) return;
+      if(seen[v.no]) return;
+      seen[v.no] = true;
+      result.push({ no:v.no, name:v.name });
+    });
+    return result;
+  }
+
+  // 환자배정에 등록되지 않은 방문자용 간단 카드 (필수항목 체크리스트는 표시하지 않음)
+  function renderVirtualPatientCard(no, name, mkey){
+    var visits = (S.visitsCache[mkey] || []).filter(function(v){ return String(v.no) === String(no); })
+      .sort(function(a,b){ return (a.date||"").localeCompare(b.date||""); });
+    var rows = visits.map(function(v){
+      return '<div class="item-row"><div class="item-main"><div class="item-label">' +
+        escapeHtml(fmtMDWeekday(v.date)) + ' ' + renderVisitTypeBadge(v.visitType||"") + ' ' + renderVisitNurseBadge(v.nurse||"") +
+        (v.memo ? ' <span style="color:var(--ink-soft);font-size:12px;">— '+escapeHtml(v.memo)+'</span>' : '') +
+      '</div></div></div>';
+    }).join("");
+    return '<div class="patient virtual-patient open" data-patient-card="virtual_'+escapeHtml(no)+'">' +
+      '<div class="patient-head">' +
+        '<span class="chev">▸</span>' +
+        '<span class="patient-id">#'+escapeHtml(no)+'</span>' +
+        '<span class="patient-name">'+escapeHtml(name)+'</span>' +
+        '<span class="patient-badges"><span class="badge badge-미지정">환자배정 미등록</span></span>' +
+      '</div>' +
+      '<div class="patient-body" style="display:block;">' +
+        '<div class="no-category-note">환자배정에 등록되지 않은 대상자입니다. 이번달 방문 기록만 표시됩니다.</div>' +
+        rows +
+      '</div>' +
+    '</div>';
+  }
 
   function renderPatientList(){
     var wrap = document.getElementById("patientList");
@@ -3117,11 +3283,11 @@
     var mkey = monthKey(S.year, S.month);
     var isYear = S.viewMode === "year";
 
-    var baseList = getNurseFilteredPatients().filter(isPatientVisibleForCurrentView);
+    var baseList = buildChecklistBaseList(mkey);
 
     if(baseList.length === 0){
       wrap.innerHTML = '<div class="empty-state">' +
-        (S.who === "전체" ? "이 기간에 표시할 환자가 없습니다." : (escapeHtml(S.who) + " 님의 담당환자 중 이 기간에 표시할 환자가 없습니다.")) +
+        (S.who === "전체" ? "이 기간에 표시할 환자가 없습니다." : (escapeHtml(S.who) + " 님과 관련된 환자 중 이 기간에 표시할 환자가 없습니다.")) +
       '</div>';
       return;
     }
@@ -3143,24 +3309,37 @@
       topList = topList.filter(function(p){ return (p.name||"").indexOf(S.checklistTopSearch) !== -1; });
     }
 
-    var topAssigned = topList.filter(function(p){ return !!p.nurse; });
-    var topUnassigned = topList.filter(function(p){ return !p.nurse; });
+    var isSpecificNurse = (S.who !== "전체" && S.who !== DOCTOR_NAME);
+    var topAssigned = topList.filter(function(p){ return isSpecificNurse ? (p.nurse === S.who) : !!p.nurse; });
+    var topUnassignedReal = topList.filter(function(p){ return !p.nurse; });
+    var orphanVisits = getOrphanVisitsThisMonth(mkey);
+    if(S.checklistTopSearch){
+      orphanVisits = orphanVisits.filter(function(o){ return (o.name||"").indexOf(S.checklistTopSearch) !== -1; });
+    }
+    var totalTopCount = topList.length + orphanVisits.length;
+    var totalUnassignedCount = topUnassignedReal.length + orphanVisits.length;
 
     var html = '<div class="checklist-section-header section-visited">' +
-        '<span>● 이번달 방문목록에 있음 (' + topList.length + '명)</span>' +
+        '<span>● 이번달 방문목록에 있음 (' + totalTopCount + '명)</span>' +
         '<input type="text" id="checklistTopSearchInput" class="tf-input" style="max-width:160px;" placeholder="이름 검색" value="'+escapeHtml(S.checklistTopSearch||"")+'">' +
       '</div>';
 
-    if(topList.length){
-      html += '<div class="checklist-subsection-header sub-assigned">담당환자방문 (' + topAssigned.length + '명)</div>';
-      html += topAssigned.length
-        ? topAssigned.map(function(p){ return renderOnePatientCard(p, mkey, false); }).join("")
-        : '<div class="empty-note" style="padding:8px 4px;">해당 없음</div>';
-
-      html += '<div class="checklist-subsection-header sub-unassigned">비담당환자방문 (' + topUnassigned.length + '명)</div>';
-      html += topUnassigned.length
-        ? topUnassigned.map(function(p){ return renderOnePatientCard(p, mkey, false); }).join("")
-        : '<div class="empty-note" style="padding:8px 4px;">해당 없음</div>';
+    if(totalTopCount){
+      html += '<div class="checklist-two-col">' +
+        '<div class="checklist-col col-assigned">' +
+          '<div class="checklist-subsection-header sub-assigned">담당환자방문 (' + topAssigned.length + '명)</div>' +
+          (topAssigned.length
+            ? topAssigned.map(function(p){ return renderOnePatientCard(p, mkey, false); }).join("")
+            : '<div class="empty-note" style="padding:8px 4px;">해당 없음</div>') +
+        '</div>' +
+        '<div class="checklist-col col-unassigned">' +
+          '<div class="checklist-subsection-header sub-unassigned">비담당환자방문 (' + totalUnassignedCount + '명)</div>' +
+          (totalUnassignedCount
+            ? topUnassignedReal.map(function(p){ return renderOnePatientCard(p, mkey, false); }).join("") +
+              orphanVisits.map(function(o){ return renderVirtualPatientCard(o.no, o.name, mkey); }).join("")
+            : '<div class="empty-note" style="padding:8px 4px;">해당 없음</div>') +
+        '</div>' +
+      '</div>';
     } else {
       html += '<div class="empty-note" style="padding:10px 4px;">이번달 방문목록에 아직 아무도 없습니다.</div>';
     }
@@ -3339,6 +3518,32 @@
     });
   }
   // 다른 모달(환자 등록 등) 위에 겹쳐서 띄우는 보조 입력창. 기존 모달 내용을 지우지 않음.
+  // 드롭다운 선택형 중첩 프롬프트. options: [{value,label}], 반환값은 선택값 또는 취소시 null.
+  function showSelectPrompt(label, options, defaultValue){
+    return new Promise(function(resolve){
+      var div = document.createElement("div");
+      div.className = "overlay show";
+      div.style.zIndex = 90;
+      var optsHtml = '<option value="">선택 안 함</option>' + options.map(function(o){
+        return '<option value="'+escapeHtml(o.value)+'" '+(o.value===defaultValue?"selected":"")+'>'+escapeHtml(o.label)+'</option>';
+      }).join("");
+      div.innerHTML = '<div class="modal" style="max-width:360px;">' +
+          '<h3>'+escapeHtml(label)+'</h3>' +
+          '<div class="field"><select id="nestedSelectInput">'+optsHtml+'</select></div>' +
+          '<div class="modal-actions">' +
+            '<button class="btn" id="nestedSelectCancel">취소</button>' +
+            '<button class="btn btn-teal" id="nestedSelectOk">확인</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(div);
+      div.querySelector("#nestedSelectCancel").onclick = function(){ div.remove(); resolve(null); };
+      div.querySelector("#nestedSelectOk").onclick = function(){
+        var v = div.querySelector("#nestedSelectInput").value;
+        div.remove();
+        resolve(v);
+      };
+    });
+  }
   function showNestedPrompt(label){
     return new Promise(function(resolve){
       var div = document.createElement("div");
