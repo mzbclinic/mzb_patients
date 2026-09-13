@@ -330,7 +330,6 @@
     .checklist-two-col{ flex-direction:column; }
   }
   .virtual-patient{ border-style:dashed; }
-  .virtual-patient .patient-head{ cursor:default; }
   .checklist-section-divider{
     height:1px; background:var(--line); margin:18px 0 10px;
     position:relative;
@@ -903,6 +902,11 @@
     S.visitsCache[monthKey(S.visitLogYear, S.visitLogMonth)] = S.visits;
     updateVisitsTabLabel();
 
+    // 기존에 임의 생성된 내부ID를 쓰던 환자들을, 환자번호를 내부ID로 쓰도록 1회 정리합니다.
+    // (환자번호가 곧 내부ID가 되면, "환자배정 미등록" 상태에서 미리 체크해둔 기록이
+    //  정식 등록 후에도 번호만 같으면 자동으로 이어집니다.)
+    await migratePatientIdsToNo();
+
     // 1회성 마이그레이션들 (동의서 필수화, 김혜경 임포트, 대상자 백필, 전체명단 임포트, 등록날짜 갱신)
     // 예전에는 이 5개의 완료여부를 매번 각각 확인했지만, 이제 통합 플래그 1개로 한 번만 확인합니다.
     // (이미 다 완료된 상태라면 이 블록 전체가 통째로 건너뛰어집니다.)
@@ -984,6 +988,43 @@
   // 이미 환자배정에 등록되어 있던 환자들을 대상자 목록에도 보이도록 1회성으로 채워 넣습니다.
   // 환자 1명당 1행으로 만들고, 구분이 여러 개면 types 배열에 함께 담습니다.
   // 정확한 방문주기 정보가 없으므로 일단 "미정(확인필요)"으로 넣고, 이미 연동된(linkedPatientId) 건은 건너뜁니다.
+  // 예전에는 환자마다 임의의 내부ID(uid)를 따로 부여했지만, 그러면 "환자배정 미등록" 상태에서
+  // 미리 체크해둔 기록을 정식 등록 시 이어받으려면 매번 별도 이관 작업이 필요해서 비효율적이었습니다.
+  // 환자번호(no)를 그대로 내부ID로 쓰도록 통일하면 번호만 같으면 자동으로 이어지므로, 기존 환자들의
+  // 내부ID를 환자번호로 한 번만 정리합니다. (번호가 없거나, 이미 다른 환자가 그 번호를 ID로 쓰고 있으면 건드리지 않음)
+  async function migratePatientIdsToNo(){
+    var flagKey = "migration-patient-id-to-no";
+    var already = await storageGet(flagKey, true);
+    if(already) return;
+
+    var changed = false;
+    S.patients.forEach(function(p){
+      if(!p.no || p.id === p.no) return;
+      var conflict = S.patients.some(function(x){ return x !== p && x.id === p.no; });
+      if(conflict) return;
+
+      var oldId = p.id;
+      var newId = p.no;
+
+      if(S.patientStates[oldId]){
+        S.patientStates[newId] = S.patientStates[oldId];
+        delete S.patientStates[oldId];
+      }
+      S.candidates.forEach(function(c){
+        if(c.linkedPatientId === oldId){ c.linkedPatientId = newId; }
+      });
+      p.id = newId;
+      changed = true;
+    });
+
+    if(changed){
+      await storageSet(K_PATIENTS, S.patients, true);
+      await storageSet(K_CANDIDATES, S.candidates, true);
+      await saveAllPatientStates();
+    }
+    await storageSet(flagKey, true, true);
+  }
+
   async function backfillCandidatesFromPatients(){
     var flagKey = "migration-backfill-candidates-from-patients";
     var already = await storageGet(flagKey, true);
@@ -1269,7 +1310,7 @@
         var startMonths = {};
         if(month){ startMonths[cat] = month; } // 없으면 아예 키를 넣지 않음 = 미설정
         var newP = {
-          id: uid("p"), no:no, name:name, nurse:NURSE_NAME_KIM_HYEKYUNG,
+          id: no || uid("p"), no:no, name:name, nurse:NURSE_NAME_KIM_HYEKYUNG,
           categories:[cat], startMonths:startMonths,
           createdAt: todayStr()
         };
@@ -1866,12 +1907,18 @@
       candidate.linkedPatientId = patient.id;
     } else {
       var newP = {
-        id: uid("p"), no: candidate.no || "", name: candidate.name, nurse: candidate.nurse,
+        id: (candidate.no || uid("p")), no: candidate.no || "", name: candidate.name, nurse: candidate.nurse,
         categories: validCats.slice(), startMonths: {}, registeredDate: candidate.registeredDate || "",
         createdAt: todayStr()
       };
       S.patients.push(newP);
-      S.patientStates[newP.id] = { items:{} };
+      var virtualId = "virtual_" + candidate.no;
+      if(candidate.no && S.patientStates[virtualId]){
+        S.patientStates[newP.id] = S.patientStates[virtualId];
+        delete S.patientStates[virtualId];
+      } else if(!S.patientStates[newP.id]){
+        S.patientStates[newP.id] = { items:{} };
+      }
       await saveAllPatientStates();
       candidate.linkedPatientId = newP.id;
     }
@@ -2480,9 +2527,6 @@
         return true;
       })
       .sort(function(a,b){
-        var aw = a.resultStatus === "대기중" ? 0 : 1;
-        var bw = b.resultStatus === "대기중" ? 0 : 1;
-        if(aw !== bw) return aw - bw;
         return (a.prescribedDate||"").localeCompare(b.prescribedDate||"");
       });
     var waitingCount = S.bloodTests.filter(function(b){ return b.resultStatus === "대기중"; }).length;
@@ -2509,9 +2553,11 @@
       html += '<tr><td colspan="8" style="text-align:center;color:var(--ink-soft);padding:24px;">등록된 혈액검사가 없습니다.</td></tr>';
     } else {
       list.forEach(function(b){
-        var statusTag = b.resultStatus === "결과통보"
-          ? '<button class="freq-tag active" data-act="togglestatus" data-bid="'+b.id+'" style="cursor:pointer;">결과통보</button>'
-          : '<button class="freq-tag" data-act="togglestatus" data-bid="'+b.id+'" style="cursor:pointer;border-color:var(--warn);color:var(--warn);">대기중</button>';
+        var checked = b.resultStatus === "결과통보";
+        var statusTag = '<label style="display:flex;align-items:center;gap:5px;cursor:pointer;">' +
+          '<input type="checkbox" class="chk" data-act="togglestatus" data-bid="'+b.id+'" '+(checked?'checked':'')+'>' +
+          '<span style="font-size:12px;color:'+(checked?'var(--teal)':'var(--ink-soft)')+';">'+(checked?'결과통보':'대기중')+'</span>' +
+        '</label>';
         html += '<tr>' +
           '<td>'+escapeHtml(b.prescribedDate||"")+'</td>' +
           '<td style="font-variant-numeric:tabular-nums;">'+escapeHtml(b.identifier||"")+'</td>' +
@@ -2532,12 +2578,12 @@
     el.querySelectorAll('[data-act="editblood"]').forEach(function(btn){
       btn.addEventListener("click", function(){ openBloodTestModal(btn.getAttribute("data-bid")); });
     });
-    el.querySelectorAll('[data-act="togglestatus"]').forEach(function(btn){
-      btn.addEventListener("click", async function(ev){
-        ev.stopPropagation();
-        var b = S.bloodTests.find(function(x){ return x.id === btn.getAttribute("data-bid"); });
+    el.querySelectorAll('[data-act="togglestatus"]').forEach(function(chk){
+      chk.addEventListener("click", function(ev){ ev.stopPropagation(); });
+      chk.addEventListener("change", async function(e){
+        var b = S.bloodTests.find(function(x){ return x.id === e.target.getAttribute("data-bid"); });
         if(!b) return;
-        b.resultStatus = (b.resultStatus === "결과통보") ? "대기중" : "결과통보";
+        b.resultStatus = e.target.checked ? "결과통보" : "대기중";
         await storageSet(K_BLOODTESTS, S.bloodTests, true);
         renderBloodTestView();
       });
@@ -3076,8 +3122,7 @@
               body += '<div class="item-row">' +
                 '<input type="checkbox" class="chk" disabled '+(syncedChecked?'checked':'')+'>' +
                 '<div class="item-main">' +
-                  '<div class="item-label">'+escapeHtml(it.name)+reqTag+' <span style="font-size:10.5px;color:var(--ink-soft);">(방문목록에서 자동 연동, 여기서는 직접 체크 불가)</span></div>' +
-                  (syncedChecked ? '<div class="item-meta">이번달 방문목록에서 체크됨</div>' : '') +
+                  '<div class="item-label">'+escapeHtml(it.name)+reqTag+' <span style="font-size:10.5px;color:var(--ink-soft);">(이번달 방문목록에서 자동연동)</span></div>' +
                 '</div>' +
               '</div>';
               return;
@@ -3097,7 +3142,7 @@
               '<input type="checkbox" class="chk" data-act="check" data-pid="'+p.id+'" data-key="'+encodeURIComponent(key)+'" data-mkey="'+mkey+'" '+(checked?'checked':'')+'>' +
               '<div class="item-main">' +
                 '<div class="item-label">'+escapeHtml(it.name)+reqTag+'</div>' +
-                (checked ? '<div class="item-meta">'+onceNote+fmtFull(d.date)+' 완료 · '+escapeHtml(d.by)+
+                (checked && S.adminMode ? '<div class="item-meta">'+onceNote+fmtFull(d.date)+' 완료 · '+escapeHtml(d.by)+
                   '<button data-act="uncheck" data-pid="'+p.id+'" data-key="'+encodeURIComponent(key)+'" data-mkey="'+recordMkey+'">취소</button></div>' : '') +
               '</div>' +
             '</div>';
@@ -3184,23 +3229,29 @@
         var stateClass = c.state==="done" ? "chip-done" : (c.state==="missing" ? "chip-missing" : (c.state==="needinfo" ? "chip-needinfo" : (c.state==="unvisited" ? "chip-unvisited" : "chip-pending")));
         return '<span class="badge badge-'+c.cat+' '+stateClass+'">'+escapeHtml(c.label)+'</span>';
       }).join("");
+      if(p.isVirtual){ badges += '<span class="badge badge-미지정">환자배정 미등록</span>'; }
     }
 
     var body = isYear ? buildYearBody(p, S.year) : buildMonthBody(p, mkey);
 
-    return '<div class="patient '+(isOpen?'open':'')+'" data-patient-card="'+p.id+'">' +
+    var footer = p.isVirtual
+      ? '<div style="padding:10px 14px;display:flex;gap:8px;align-items:center;">' +
+          '<button class="btn btn-sm btn-teal" data-act="registerpatient" data-pid="'+p.id+'" data-no="'+escapeHtml(p.no||"")+'" data-name="'+escapeHtml(p.name||"")+'">환자배정에 등록하기</button>' +
+          '<span style="font-size:11.5px;color:var(--ink-soft);">등록 전까지의 체크 기록은 임시 보관되며, 정식 등록 후에는 별도로 이관해야 할 수 있습니다.</span>' +
+        '</div>'
+      : '<div style="padding:10px 14px;display:flex;gap:8px;">' +
+          '<button class="btn btn-sm" data-act="editpatient" data-pid="'+p.id+'">환자정보 수정</button>' +
+          (S.adminMode ? '<button class="btn btn-sm" style="color:var(--warn);border-color:var(--warn);" data-act="delpatient" data-pid="'+p.id+'">환자 삭제</button>' : '') +
+        '</div>';
+
+    return '<div class="patient '+(isOpen?'open':'')+(p.isVirtual?' virtual-patient':'')+'" data-patient-card="'+p.id+'">' +
       '<div class="patient-head" data-act="toggle" data-pid="'+p.id+'">' +
         '<span class="chev">▸</span>' +
         '<span class="patient-id">#'+escapeHtml(p.no||"")+'</span>' +
         '<span class="patient-name">'+escapeHtml(p.name)+'</span>' +
         '<span class="patient-badges">'+badges+'</span>' +
       '</div>' +
-      '<div class="patient-body">' + body +
-        '<div style="padding:10px 14px;display:flex;gap:8px;">' +
-          '<button class="btn btn-sm" data-act="editpatient" data-pid="'+p.id+'">환자정보 수정</button>' +
-          (S.adminMode ? '<button class="btn btn-sm" style="color:var(--warn);border-color:var(--warn);" data-act="delpatient" data-pid="'+p.id+'">환자 삭제</button>' : '') +
-        '</div>' +
-      '</div>' +
+      '<div class="patient-body">' + body + footer + '</div>' +
     '</div>';
   }
 
@@ -3230,8 +3281,9 @@
     });
   }
 
-  // 환자배정(S.patients)에 아예 등록되어 있지 않은데, 이번달 방문목록에는 기록이 있는 사람들
-  // (등록번호 기준으로 중복 제거). S.who가 특정 간호사면 그 간호사가 실제로 방문한 경우만.
+  // 환자배정(S.patients)에 아예 등록되어 있지 않은데, 이번달 방문목록에는 기록이 있는 사람들을
+  // "가상 환자" 객체로 만들어, 정식 환자와 동일한 카드·체크리스트로 보여줄 수 있게 합니다.
+  // 구분은 이번달 방문유형에서 추론하고, 이번달을 첫 방문달로 취급합니다.
   function getOrphanVisitsThisMonth(mkey){
     var list = S.visitsCache[mkey];
     if(!list) return [];
@@ -3245,33 +3297,28 @@
       if(isSpecificNurse && v.nurse !== S.who) return;
       if(seen[v.no]) return;
       seen[v.no] = true;
-      result.push({ no:v.no, name:v.name });
+
+      var catsForNo = {};
+      list.forEach(function(v2){
+        if(String(v2.no) !== String(v.no)) return;
+        var cat = VISIT_TYPE_TO_CATEGORY[v2.visitType];
+        if(cat) catsForNo[cat] = true;
+      });
+      var categories = Object.keys(catsForNo);
+      var startMonths = {};
+      categories.forEach(function(c){ startMonths[c] = mkey; });
+
+      result.push({
+        id: "virtual_" + v.no,
+        no: v.no,
+        name: v.name,
+        nurse: "",
+        categories: categories,
+        startMonths: startMonths,
+        isVirtual: true
+      });
     });
     return result;
-  }
-
-  // 환자배정에 등록되지 않은 방문자용 간단 카드 (필수항목 체크리스트는 표시하지 않음)
-  function renderVirtualPatientCard(no, name, mkey){
-    var visits = (S.visitsCache[mkey] || []).filter(function(v){ return String(v.no) === String(no); })
-      .sort(function(a,b){ return (a.date||"").localeCompare(b.date||""); });
-    var rows = visits.map(function(v){
-      return '<div class="item-row"><div class="item-main"><div class="item-label">' +
-        escapeHtml(fmtMDWeekday(v.date)) + ' ' + renderVisitTypeBadge(v.visitType||"") + ' ' + renderVisitNurseBadge(v.nurse||"") +
-        (v.memo ? ' <span style="color:var(--ink-soft);font-size:12px;">— '+escapeHtml(v.memo)+'</span>' : '') +
-      '</div></div></div>';
-    }).join("");
-    return '<div class="patient virtual-patient open" data-patient-card="virtual_'+escapeHtml(no)+'">' +
-      '<div class="patient-head">' +
-        '<span class="chev">▸</span>' +
-        '<span class="patient-id">#'+escapeHtml(no)+'</span>' +
-        '<span class="patient-name">'+escapeHtml(name)+'</span>' +
-        '<span class="patient-badges"><span class="badge badge-미지정">환자배정 미등록</span></span>' +
-      '</div>' +
-      '<div class="patient-body" style="display:block;">' +
-        '<div class="no-category-note">환자배정에 등록되지 않은 대상자입니다. 이번달 방문 기록만 표시됩니다.</div>' +
-        rows +
-      '</div>' +
-    '</div>';
   }
 
   function renderPatientList(){
@@ -3336,7 +3383,7 @@
           '<div class="checklist-subsection-header sub-unassigned">비담당환자방문 (' + totalUnassignedCount + '명)</div>' +
           (totalUnassignedCount
             ? topUnassignedReal.map(function(p){ return renderOnePatientCard(p, mkey, false); }).join("") +
-              orphanVisits.map(function(o){ return renderVirtualPatientCard(o.no, o.name, mkey); }).join("")
+              orphanVisits.map(function(o){ return renderOnePatientCard(o, mkey, false); }).join("")
             : '<div class="empty-note" style="padding:8px 4px;">해당 없음</div>') +
         '</div>' +
       '</div>';
@@ -3453,6 +3500,12 @@
           renderAll();
           showToast("삭제되었습니다.");
         }
+      });
+    });
+    wrap.querySelectorAll('[data-act="registerpatient"]').forEach(function(el){
+      el.addEventListener("click", function(ev){
+        ev.stopPropagation();
+        openAddPatientModal(null, { no: el.getAttribute("data-no"), name: el.getAttribute("data-name") });
       });
     });
   }
@@ -3588,9 +3641,11 @@
   }
 
   /* ================= 환자 등록 / 수정 모달 ================= */
-  function openAddPatientModal(editId){
+  function openAddPatientModal(editId, prefill){
     var editing = null;
     if(editId){ editing = S.patients.find(function(x){ return x.id===editId; }); }
+    var prefillNo = (!editing && prefill && prefill.no) ? prefill.no : "";
+    var prefillName = (!editing && prefill && prefill.name) ? prefill.name : "";
 
     var staffOptions = S.staff.map(function(n){
       return '<option value="'+escapeHtml(n)+'" '+((editing&&editing.nurse===n)?'selected':'')+'>'+escapeHtml(n)+'</option>';
@@ -3608,8 +3663,8 @@
 
     openModal(
       '<h3>'+(editing?'환자 정보 수정':'새 환자 등록')+'</h3>' +
-      '<div class="field"><label>환자번호</label><input type="text" id="fNo" value="'+(editing?escapeHtml(editing.no):'')+'" placeholder="예: 78"></div>' +
-      '<div class="field"><label>이름</label><input type="text" id="fName" value="'+(editing?escapeHtml(editing.name):'')+'" placeholder="예: 최옥희"></div>' +
+      '<div class="field"><label>환자번호</label><input type="text" id="fNo" value="'+(editing?escapeHtml(editing.no):escapeHtml(prefillNo))+'" placeholder="예: 78"></div>' +
+      '<div class="field"><label>이름</label><input type="text" id="fName" value="'+(editing?escapeHtml(editing.name):escapeHtml(prefillName))+'" placeholder="예: 최옥희"></div>' +
       '<div class="field"><label>시범사업 구분 · 첫 방문달 (복수 선택 가능)</label>' +
         '<p style="font-size:11.5px;color:var(--ink-soft);margin:-2px 0 6px;">첫 방문달을 기준으로 이후 달의 필수항목이 자동으로 바뀝니다.</p>' +
         catRows +
@@ -3664,12 +3719,12 @@
       if(!name){ showToast("이름을 입력해주세요."); return; }
       if(cats.length===0){ showToast("시범사업 구분을 한 개 이상 선택해주세요."); return; }
 
-      // 동일 환자번호+이름 중복 등록 방지 (수정 중인 본인 카드는 제외)
+      // 환자번호는 이제 내부 ID로도 쓰이므로, 번호 하나당 환자 한 명만 존재해야 합니다.
       var dup = S.patients.find(function(x){
-        return x.id !== (editing?editing.id:null) && (x.no||"") === no && x.name === name;
+        return x.id !== (editing?editing.id:null) && no && (x.no||"") === no;
       });
       if(dup){
-        showToast("환자번호 · 이름이 같은 환자가 이미 등록되어 있습니다.");
+        showToast("환자번호 "+no+"번은 이미 "+dup.name+" 님으로 등록되어 있습니다.");
         return;
       }
 
@@ -3679,9 +3734,18 @@
       if(editing){
         editing.no = no; editing.name = name; editing.nurse = nurse; editing.categories = cats; editing.startMonths = startMonths; editing.location = location;
       } else {
-        var p = { id: uid("p"), no:no, name:name, nurse:nurse, categories:cats, startMonths:startMonths, location:location, createdAt: todayStr() };
+        // 환자번호(no)를 그대로 내부 ID로 사용합니다 (번호가 비어있는 예외적인 경우에만 임시 ID 생성).
+        var newId = no || uid("p");
+        var p = { id: newId, no:no, name:name, nurse:nurse, categories:cats, startMonths:startMonths, location:location, createdAt: todayStr() };
         S.patients.push(p);
-        S.patientStates[p.id] = { items:{} };
+        // 정식 등록 전, "환자배정 미등록" 상태로 미리 체크해둔 기록이 있으면 그대로 이어받습니다.
+        var virtualId = "virtual_" + no;
+        if(no && S.patientStates[virtualId]){
+          S.patientStates[newId] = S.patientStates[virtualId];
+          delete S.patientStates[virtualId];
+        } else if(!S.patientStates[newId]){
+          S.patientStates[newId] = { items:{} };
+        }
         await saveAllPatientStates();
       }
       await storageSet(K_PATIENTS, S.patients, true);
