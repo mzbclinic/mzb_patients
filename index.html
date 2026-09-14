@@ -587,6 +587,8 @@
   var K_CANDIDATES = "candidates";
   var K_BLOODTESTS = "blood-tests";
   var K_ALL_STATES = "patient-states-all"; // 환자별 state:ID 키를 다 합쳐서 이 키 하나로 저장 (호출 횟수 절감)
+  var K_MINT_CHECKERS = "mint-checkers"; // 간호사 명단과는 별개로, MINT 일방시를 체크하는 사회복지사 등의 명단
+  var DEFAULT_MINT_CHECKERS = ["신현경"];
   function stateKey(pid){ return "state:" + pid; }
   async function saveAllPatientStates(){
     return await storageSet(K_ALL_STATES, S.patientStates, true);
@@ -596,6 +598,7 @@
   var S = {
     templates: null,
     staff: null,
+    mintCheckers: null,
     patients: null,
     patientStates: {},   // id -> state object
     who: "",
@@ -831,16 +834,13 @@
     S.visitLogMonth = new Date().getMonth() + 1;
     var currentVisitKey = visitStateKey(S.visitLogYear, S.visitLogMonth);
 
-    // 서로 무관한 조회들을 한꺼번에(병렬로) 요청합니다.
-    // 예전에는 이 8개를 하나씩 순서대로 기다렸는데(초기 로딩이 느렸던 핵심 원인),
-    // 이제 "가장 느린 것 1개"만큼만 기다리면 됩니다.
     // 서로 무관한 조회들을 한 번의 API 호출로 묶어서 요청합니다(kv_get_many).
     // 예전에는 이 8개를 하나씩 순서대로 기다렸는데(초기 로딩이 느렸던 핵심 원인),
     // Promise.all로 "동시에" 여러 번 보내는 방법도 가능하지만, 구글시트/Apps Script는
     // 요청 하나마다 스프레드시트를 여는 비용이 있고 동시 실행 제한도 있어서,
     // 이렇게 한 번의 호출(kv_get_many)로 묶는 편이 더 빠르고 안전합니다.
     // (K_LAST_NAME은 기기 로컬 설정이라 네트워크 호출 없이 즉시 가져옵니다.)
-    var sharedKeys = [K_TEMPLATES, K_STAFF, K_PATIENTS, K_ALL_STATES, K_CANDIDATES, K_BLOODTESTS, currentVisitKey, K_MIGRATIONS_DONE];
+    var sharedKeys = [K_TEMPLATES, K_STAFF, K_PATIENTS, K_ALL_STATES, K_CANDIDATES, K_BLOODTESTS, currentVisitKey, K_MIGRATIONS_DONE, K_MINT_CHECKERS];
     var sharedResults = await storageGetMany(sharedKeys);
     var lastName = await storageGet(K_LAST_NAME, false);
 
@@ -852,15 +852,24 @@
     S.bloodTests = sharedResults[K_BLOODTESTS];
     var visitsRaw = sharedResults[currentVisitKey];
     var migrationsDone = sharedResults[K_MIGRATIONS_DONE];
+    S.mintCheckers = sharedResults[K_MINT_CHECKERS];
 
     // ---- 아래는 전부 메모리 안에서만 처리(네트워크 호출 없음) ----
-    var staffChanged = false, patientsChanged = false, candidatesChanged = false, bloodTestsChanged = false, templatesChanged = false;
+    var staffChanged = false, patientsChanged = false, candidatesChanged = false, bloodTestsChanged = false, templatesChanged = false, mintCheckersChanged = false;
 
     if(!S.templates){ S.templates = DEFAULT_TEMPLATES; templatesChanged = true; }
     else if(migrateTemplates(S.templates)){ templatesChanged = true; }
 
     if(!S.staff){ S.staff = DEFAULT_STAFF.slice(); staffChanged = true; }
     if(S.staff.indexOf(DOCTOR_NAME) === -1){ S.staff.push(DOCTOR_NAME); staffChanged = true; }
+
+    if(!Array.isArray(S.mintCheckers)){ S.mintCheckers = DEFAULT_MINT_CHECKERS.slice(); mintCheckersChanged = true; }
+    // 간호사 명단에 사회복지사 등 비간호사가 잘못 섞여있으면(예: 이전에 실수로 추가된 경우) MINT 체크자 명단으로 옮겨줍니다.
+    DEFAULT_MINT_CHECKERS.forEach(function(name){
+      var idx = S.staff.indexOf(name);
+      if(idx !== -1){ S.staff.splice(idx, 1); staffChanged = true; }
+      if(S.mintCheckers.indexOf(name) === -1){ S.mintCheckers.push(name); mintCheckersChanged = true; }
+    });
 
     if(!S.patients || !Array.isArray(S.patients)){ S.patients = []; patientsChanged = true; }
     var beforeLen = S.patients.length;
@@ -927,6 +936,7 @@
     if(patientsChanged) writePairs.push({ key: K_PATIENTS, value: S.patients });
     if(candidatesChanged) writePairs.push({ key: K_CANDIDATES, value: S.candidates });
     if(bloodTestsChanged) writePairs.push({ key: K_BLOODTESTS, value: S.bloodTests });
+    if(mintCheckersChanged) writePairs.push({ key: K_MINT_CHECKERS, value: S.mintCheckers });
     if(writePairs.length){ await storageSetMany(writePairs); }
 
     renderWhoSelect();
@@ -2090,13 +2100,6 @@
     var total = relevant.length;
     var checkedCount = relevant.filter(function(v){ return v.mintVisit; }).length;
 
-    var byNurse = {};
-    relevant.forEach(function(v){
-      var n = v.nurse || "미기재";
-      byNurse[n] = (byNurse[n] || 0) + 1;
-    });
-    var nurseNames = Object.keys(byNurse).sort(function(a,b){ return a.localeCompare(b,"ko"); });
-
     var byChecker = {};
     relevant.forEach(function(v){
       if(v.mintVisit){
@@ -2106,21 +2109,9 @@
     });
     var checkerNames = Object.keys(byChecker).sort(function(a,b){ return a.localeCompare(b,"ko"); });
 
-    var html = '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;">';
+    var html = '<div style="margin-bottom:14px;">';
 
-    html += '<div class="assign-table-wrap" style="flex:1;min-width:220px;">' +
-      '<div style="padding:10px 12px;font-weight:700;font-size:13px;">일방시 입력 건수 <span style="font-weight:400;color:var(--ink-soft);font-size:12px;">(전체 '+total+'건)</span></div>' +
-      '<table class="assign-table"><thead><tr><th>간호사</th><th>입력 건수</th></tr></thead><tbody>';
-    if(nurseNames.length === 0){
-      html += '<tr><td colspan="2" style="text-align:center;color:var(--ink-soft);padding:16px;">이 달에 일방시 방문이 없습니다.</td></tr>';
-    } else {
-      nurseNames.forEach(function(n){
-        html += '<tr><td style="font-weight:600;">'+escapeHtml(n)+'</td><td style="text-align:center;">'+byNurse[n]+'</td></tr>';
-      });
-    }
-    html += '</tbody></table></div>';
-
-    html += '<div class="assign-table-wrap" style="flex:1;min-width:220px;">' +
+    html += '<div class="assign-table-wrap">' +
       '<div style="padding:10px 12px;font-weight:700;font-size:13px;">MINT 일방시 체크 현황 <span style="font-weight:400;color:var(--ink-soft);font-size:12px;">(전체 '+total+'건 중 '+checkedCount+'건 체크됨)</span></div>' +
       '<table class="assign-table"><thead><tr><th>체크한 사람</th><th>체크 건수</th></tr></thead><tbody>';
     if(checkerNames.length === 0){
@@ -2275,7 +2266,8 @@
         var vid = span.getAttribute("data-vid");
         var v = S.visits.find(function(x){ return x.id === vid; });
         if(!v) return;
-        var options = S.staff.map(function(n){ return {value:n, label:n}; });
+        var allCheckers = S.staff.concat((S.mintCheckers||[]).filter(function(n){ return S.staff.indexOf(n) === -1; }));
+        var options = allCheckers.map(function(n){ return {value:n, label:n}; });
         var chosen = await showSelectPrompt("MINT 일방시를 체크한 사람", options, v.mintCheckedBy || "");
         if(chosen === null) return;
         v.mintCheckedBy = chosen;
