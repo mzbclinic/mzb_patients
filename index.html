@@ -547,7 +547,7 @@
 
   var DEFAULT_STAFF = ["김혜경", "전송이", "안혜리", "신현경", "전용우"];
   var ADMIN_PIN = "7575";
-  var DOCTOR_NAME = "전용우"; // 명단에 자동으로 포함되는 기본 스태프 이름 (특별한 권한 부여는 없음, 관리자 모드는 PIN으로만 구분)
+  var DOCTOR_NAME = "전용우"; // 의사·관리자. 간호사 명단에는 포함시키지 않음 (관리자 권한은 PIN 관리자 모드로만 구분)
 
   /* ================= 구글시트 연동 설정 ================= */
   // Apps Script 배포 후 나오는 "웹 앱 URL"을 아래 따옴표 안에 붙여넣으세요.
@@ -861,7 +861,9 @@
     else if(migrateTemplates(S.templates)){ templatesChanged = true; }
 
     if(!S.staff){ S.staff = DEFAULT_STAFF.slice(); staffChanged = true; }
-    if(S.staff.indexOf(DOCTOR_NAME) === -1){ S.staff.push(DOCTOR_NAME); staffChanged = true; }
+    // 의사(전용우)는 간호사가 아니므로 간호사 명단에 넣지 않습니다. 관리자 권한은 PIN(관리자 모드)으로만 구분합니다.
+    var docIdx = S.staff.indexOf(DOCTOR_NAME);
+    if(docIdx !== -1){ S.staff.splice(docIdx, 1); staffChanged = true; }
 
     if(!Array.isArray(S.mintCheckers)){ S.mintCheckers = DEFAULT_MINT_CHECKERS.slice(); mintCheckersChanged = true; }
     // 간호사 명단에 사회복지사 등 비간호사가 잘못 섞여있으면(예: 이전에 실수로 추가된 경우) MINT 체크자 명단으로 옮겨줍니다.
@@ -3101,6 +3103,8 @@
         '<div class="category-title"><span class="category-bar"></span><span class="'+'cat-'+cat+'-text'+'">'+cat+'</span>' +
         '<span style="font-weight:400;color:var(--ink-soft);font-size:11px;">'+phaseLabel+'</span></div>';
       groups.forEach(function(g){
+        var isSyncGroup = g.items.length > 0 && g.items.every(function(it){ return it.syncFromVisit; });
+        if(isSyncGroup) return; // 구분별로 나누지 않고 환자 전체 통합 섹션으로 아래에서 한 번만 표시
         var titleCls = g.group === "단독간호" ? "tag-solo" : (g.group === "추가간호" ? "tag-extra" : "");
         var proxyNote = buildProxyNoteForGroup(p, cat, g.group, mkey);
         body += '<div class="group-block"><div class="group-title '+titleCls+'">'+escapeHtml(g.group)+proxyNote+'</div>';
@@ -3110,13 +3114,23 @@
           var reqTag = required ? '<span class="req-tag">필수</span>' : '';
           if(it.type === "check"){
             if(it.syncFromVisit){
-              var syncedChecked = isMintSyncedFromVisits(p, mkey);
-              body += '<div class="item-row">' +
-                '<input type="checkbox" class="chk" disabled '+(syncedChecked?'checked':'')+'>' +
-                '<div class="item-main">' +
-                  '<div class="item-label">'+escapeHtml(it.name)+reqTag+' <span style="font-size:10.5px;color:var(--ink-soft);">(이번달 방문목록에서 자동연동)</span></div>' +
-                '</div>' +
-              '</div>';
+              var relevantVisits = findVisitsForGroup(p, cat, g.group, mkey).slice().sort(function(a,b){ return (a.date||"").localeCompare(b.date||""); });
+              if(relevantVisits.length === 0){
+                body += '<div class="item-row">' +
+                  '<input type="checkbox" class="chk" disabled>' +
+                  '<div class="item-main"><div class="item-label" style="color:var(--ink-soft);">'+escapeHtml(it.name)+' — 이번달 관련 방문이 없습니다.</div></div>' +
+                '</div>';
+              } else {
+                relevantVisits.forEach(function(v){
+                  var vChecked = !!v.mintVisit;
+                  body += '<div class="item-row">' +
+                    '<input type="checkbox" class="chk" disabled '+(vChecked?'checked':'')+'>' +
+                    '<div class="item-main">' +
+                      '<div class="item-label">('+escapeHtml(fmtMD(v.date))+' '+escapeHtml(v.visitType||"")+') '+escapeHtml(it.name)+'</div>' +
+                    '</div>' +
+                  '</div>';
+                });
+              }
               return;
             }
             var d, recordMkey;
@@ -3164,6 +3178,26 @@
       });
       body += '</div>';
     });
+
+    // MINT 일방시: 구분(재택/일방시/장주사)과 무관하게, 이번달 이 환자의 관련 방문 전체를 모아 한 번만 표시합니다.
+    var mintVisits = (S.visitsCache[mkey] || [])
+      .filter(function(v){ return String(v.no) === String(p.no) && (VISIT_TYPE_TO_GROUPS[v.visitType]||[]).indexOf("MINT 일방시") !== -1; })
+      .sort(function(a,b){ return (a.date||"").localeCompare(b.date||""); });
+    if(mintVisits.length > 0){
+      body += '<div class="group-block"><div class="group-title">MINT 일방시' +
+        ' <span style="font-size:10.5px;color:var(--ink-soft);font-weight:400;">(이번달 방문목록에서 자동연동)</span></div>';
+      mintVisits.forEach(function(v){
+        var vChecked = !!v.mintVisit;
+        body += '<div class="item-row">' +
+          '<input type="checkbox" class="chk" disabled '+(vChecked?'checked':'')+'>' +
+          '<div class="item-main">' +
+            '<div class="item-label">('+escapeHtml(fmtMD(v.date))+' '+escapeHtml(v.visitType||"")+') MINT 일방시 점검서식</div>' +
+          '</div>' +
+        '</div>';
+      });
+      body += '</div>';
+    }
+
     return body;
   }
 
