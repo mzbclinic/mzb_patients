@@ -1956,12 +1956,29 @@
   }
 
   // 방문유형 고정 선택지 (탭 간 색상 일관성을 위해 정확히 일치하는 값만 사용)
-  var VISIT_TYPES = ["재택포괄", "재택정기방문", "단독간호", "추가간호", "일방시", "일방시(의사단독)", "장주사의간동반", "장주사단독간호"];
+  var VISIT_TYPES = ["재택포괄", "재택정기방문", "단독간호", "추가간호", "일방시", "일방시(의사단독)", "의단+간단", "장주사의간동반", "장주사단독간호"];
 
-  // 방문유형이 어느 구분(재택/일방시/장주사)에 해당하는지 매핑 (체크리스트에 언제 구분 블록을 보여줄지 판단용)
+  // 방문유형별로 해당하는 구분(재택/일방시/장주사)과, 구분별로 처리하는 중분류(그룹)를 매핑합니다.
+  // "의단+간단"처럼 한 방문이 여러 구분·그룹을 동시에 처리하는 경우도 있어서, 구분마다 그룹 배열을 따로 둡니다.
+  var VISIT_TYPE_TO_GROUPS_BY_CAT = {
+    "재택포괄": { "재택": ["동의서", "재택서식", "MINT 일방시"] },
+    "재택정기방문": { "재택": ["동의서", "재택서식", "MINT 일방시"] },
+    "단독간호": { "재택": ["단독간호"] },
+    "추가간호": { "재택": ["추가간호"] },
+    "일방시": { "일방시": ["동의서", "방문", "MINT 일방시"] },
+    "일방시(의사단독)": { "일방시": ["동의서", "방문", "MINT 일방시"] },
+    "의단+간단": { "일방시": ["동의서", "방문", "MINT 일방시"], "재택": ["단독간호"] },
+    "장주사의간동반": { "장주사": ["동의서", "장주서식"] },
+    "장주사단독간호": { "장주사": ["동의서", "장주서식"] }
+  };
+  function getVisitCategories(visitType){
+    var m = VISIT_TYPE_TO_GROUPS_BY_CAT[visitType];
+    return m ? Object.keys(m) : [];
+  }
+  // 대표 구분 하나만 필요한 곳(배지 색상 등)에 사용 - 복합 방문유형은 첫 번째 구분을 대표로 씁니다.
   var VISIT_TYPE_TO_CATEGORY = {
     "재택포괄": "재택", "재택정기방문": "재택", "단독간호": "재택", "추가간호": "재택",
-    "일방시": "일방시", "일방시(의사단독)": "일방시",
+    "일방시": "일방시", "일방시(의사단독)": "일방시", "의단+간단": "일방시",
     "장주사의간동반": "장주사", "장주사단독간호": "장주사"
   };
   // 이번달 방문목록에 그 구분(cat)에 해당하는 방문이 실제로 있었는지
@@ -1969,29 +1986,18 @@
     var list = S.visitsCache[mkey];
     if(!list || !p.no) return false;
     return list.some(function(v){
-      return String(v.no) === String(p.no) && VISIT_TYPE_TO_CATEGORY[v.visitType] === cat;
+      return String(v.no) === String(p.no) && getVisitCategories(v.visitType).indexOf(cat) !== -1;
     });
   }
 
-  // 방문유형별로 어느 중분류(그룹)를 "처리"한 것으로 볼지 매핑 (대리방문 표시에 사용)
-  var VISIT_TYPE_TO_GROUPS = {
-    "재택포괄": ["동의서", "재택서식", "MINT 일방시"],
-    "재택정기방문": ["동의서", "재택서식", "MINT 일방시"],
-    "단독간호": ["단독간호"],
-    "추가간호": ["추가간호"],
-    "일방시": ["동의서", "방문", "MINT 일방시"],
-    "일방시(의사단독)": ["동의서", "방문", "MINT 일방시"],
-    "장주사의간동반": ["동의서", "장주서식"],
-    "장주사단독간호": ["동의서", "장주서식"]
-  };
   // 이번달, 이 환자의 이 구분/그룹을 처리한 방문 기록들 (담당간호사 대신 방문한 경우 표시하기 위함)
   function findVisitsForGroup(p, cat, groupName, mkey){
     var list = S.visitsCache[mkey];
     if(!list || !p.no) return [];
     return list.filter(function(v){
       if(String(v.no) !== String(p.no)) return false;
-      if(VISIT_TYPE_TO_CATEGORY[v.visitType] !== cat) return false;
-      var groups = VISIT_TYPE_TO_GROUPS[v.visitType] || [];
+      var groupsByCat = VISIT_TYPE_TO_GROUPS_BY_CAT[v.visitType] || {};
+      var groups = groupsByCat[cat] || [];
       return groups.indexOf(groupName) !== -1;
     });
   }
@@ -2022,6 +2028,7 @@
     "추가간호": { bg:"var(--extra)", color:"var(--extra-text)" },
     "일방시": { bg:"var(--visit)", color:"var(--visit-text)" },
     "일방시(의사단독)": { bg:"var(--visit)", color:"var(--visit-text)" },
+    "의단+간단": { bg:"linear-gradient(90deg, var(--visit) 50%, var(--solo) 50%)", color:"var(--visit-text)" },
     "장주사의간동반": { bg:"var(--disability)", color:"var(--disability-text)" },
     "장주사단독간호": { bg:"var(--disability)", color:"var(--disability-text)" }
   };
@@ -2781,7 +2788,7 @@
   }
   // 방문유형에 따라 어느 구분·그룹의 "방문 날짜" 로그에 자동으로 반영할지
   function getSyncTargetForVisitType(visitType){
-    if(visitType === "일방시" || visitType === "일방시(의사단독)") return { cat:"일방시", group:"방문" };
+    if(visitType === "일방시" || visitType === "일방시(의사단독)" || visitType === "의단+간단") return { cat:"일방시", group:"방문" };
     if(visitType === "추가간호") return { cat:"재택", group:"추가간호" };
     return null;
   }
@@ -3180,8 +3187,12 @@
     });
 
     // MINT 일방시: 구분(재택/일방시/장주사)과 무관하게, 이번달 이 환자의 관련 방문 전체를 모아 한 번만 표시합니다.
+    function visitTypeHasGroupAnywhere(visitType, groupName){
+      var byCat = VISIT_TYPE_TO_GROUPS_BY_CAT[visitType] || {};
+      return Object.keys(byCat).some(function(c){ return byCat[c].indexOf(groupName) !== -1; });
+    }
     var mintVisits = (S.visitsCache[mkey] || [])
-      .filter(function(v){ return String(v.no) === String(p.no) && (VISIT_TYPE_TO_GROUPS[v.visitType]||[]).indexOf("MINT 일방시") !== -1; })
+      .filter(function(v){ return String(v.no) === String(p.no) && visitTypeHasGroupAnywhere(v.visitType, "MINT 일방시"); })
       .sort(function(a,b){ return (a.date||"").localeCompare(b.date||""); });
     if(mintVisits.length > 0){
       body += '<div class="group-block"><div class="group-title">MINT 일방시' +
@@ -3327,8 +3338,7 @@
       var catsForNo = {};
       list.forEach(function(v2){
         if(String(v2.no) !== String(v.no)) return;
-        var cat = VISIT_TYPE_TO_CATEGORY[v2.visitType];
-        if(cat) catsForNo[cat] = true;
+        getVisitCategories(v2.visitType).forEach(function(cat){ catsForNo[cat] = true; });
       });
       var categories = Object.keys(catsForNo);
       var startMonths = {};
