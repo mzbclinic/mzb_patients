@@ -174,6 +174,7 @@
   .patient.open .patient-head .chev{ transform:rotate(90deg); }
   .patient-id{
     font-size:10.5px; color:var(--ink-soft); font-variant-numeric:tabular-nums; flex:none;
+    width:32px; text-align:right;
   }
   .patient-name{ font-weight:500; font-size:13px; flex:none; }
   .badge{
@@ -1998,7 +1999,7 @@
   }
 
   // 방문유형 고정 선택지 (탭 간 색상 일관성을 위해 정확히 일치하는 값만 사용)
-  var VISIT_TYPES = ["재택포괄", "재택정기방문", "단독간호", "추가간호", "일방시", "일방시(의사단독)", "의단+간단", "장주사의간동반", "장주사단독간호"];
+  var VISIT_TYPES = ["재택포괄", "재택정기방문", "단독간호", "추가간호", "일방시", "일방시(의사단독)", "의단+간단", "장주사포괄", "장주사중간", "장주사의간동반", "장주사단독간호"];
 
   // 방문유형별로 해당하는 구분(재택/일방시/장주사)과, 구분별로 처리하는 중분류(그룹)를 매핑합니다.
   // "의단+간단"처럼 한 방문이 여러 구분·그룹을 동시에 처리하는 경우도 있어서, 구분마다 그룹 배열을 따로 둡니다.
@@ -2010,6 +2011,8 @@
     "일방시": { "일방시": ["동의서", "방문", "MINT 일방시"] },
     "일방시(의사단독)": { "일방시": ["동의서", "방문", "MINT 일방시"] },
     "의단+간단": { "일방시": ["동의서", "방문", "MINT 일방시"], "재택": ["단독간호"] },
+    "장주사포괄": { "장주사": ["동의서", "장주서식"] },
+    "장주사중간": { "장주사": ["동의서", "장주서식"] },
     "장주사의간동반": { "장주사": ["동의서", "장주서식"] },
     "장주사단독간호": { "장주사": ["동의서", "장주서식"] }
   };
@@ -2021,7 +2024,7 @@
   var VISIT_TYPE_TO_CATEGORY = {
     "재택포괄": "재택", "재택정기방문": "재택", "단독간호": "재택", "추가간호": "재택",
     "일방시": "일방시", "일방시(의사단독)": "일방시", "의단+간단": "일방시",
-    "장주사의간동반": "장주사", "장주사단독간호": "장주사"
+    "장주사포괄": "장주사", "장주사중간": "장주사", "장주사의간동반": "장주사", "장주사단독간호": "장주사"
   };
   // 이번달 방문목록에 그 구분(cat)에 해당하는 방문이 실제로 있었는지
   function patientCategoryVisitedThisMonth(p, cat, mkey){
@@ -2071,6 +2074,8 @@
     "일방시": { bg:"var(--visit)", color:"var(--visit-text)" },
     "일방시(의사단독)": { bg:"var(--visit)", color:"var(--visit-text)" },
     "의단+간단": { bg:"linear-gradient(90deg, var(--visit) 50%, var(--solo) 50%)", color:"var(--visit-text)" },
+    "장주사포괄": { bg:"var(--disability)", color:"var(--disability-text)" },
+    "장주사중간": { bg:"var(--disability)", color:"var(--disability-text)" },
     "장주사의간동반": { bg:"var(--disability)", color:"var(--disability-text)" },
     "장주사단독간호": { bg:"var(--disability)", color:"var(--disability-text)" }
   };
@@ -2852,6 +2857,10 @@
   // startMonths에 값이 없으면 "시작월 미정"으로 보고 null을 반환합니다 (createdAt으로 임의 대체하지 않음).
   function getCategoryStartMonth(p, cat){
     if(p.startMonths && p.startMonths[cat]) return p.startMonths[cat];
+    // 구분별 시작월이 따로 설정 안 되어 있으면, 환자 목록 노출 기준과 동일하게 등록날짜를 사용합니다.
+    // (대상자목록에서 담당간호사 지정으로 자동 등록된 환자는 startMonths가 비어있는 경우가 많아서,
+    //  이 폴백이 없으면 체크를 다 해도 "시작월 미정" 상태로 남아 필수항목 집계가 영원히 안 됩니다.)
+    if(p.registeredDate) return p.registeredDate.slice(0,7);
     return null;
   }
   // mkey가 시작월보다 이전이거나, 시작월 자체가 미정이면 null(집계 제외)
@@ -2918,13 +2927,12 @@
   }
 
   // 방문목록에서 MINT 일방시 체크가 하나라도 된 방문이 이번달에 있으면 충족으로 봄 (자동 연동 전용)
-  function isMintSyncedFromVisits(p, mkey){
-    var list = S.visitsCache[mkey];
-    if(!list || !p.no) return false;
-    return list.some(function(v){ return String(v.no) === String(p.no) && v.mintVisit; });
+  // 이 구분(cat)에 해당하는 방문 중 MINT 일방시가 체크된 게 있는지 (구분별로 정확히 구분해서 판정 - 다른 구분의 MINT 체크가 섞여들지 않도록)
+  function isMintSyncedFromVisits(p, cat, mkey){
+    return findVisitsForGroup(p, cat, "MINT 일방시", mkey).some(function(v){ return !!v.mintVisit; });
   }
   function isItemSatisfied(p, cat, group, it, mkey){
-    if(it.syncFromVisit){ return isMintSyncedFromVisits(p, mkey); }
+    if(it.syncFromVisit){ return isMintSyncedFromVisits(p, cat, mkey); }
     var key = cat+"|"+group+"|"+it.name;
     if(it.type === "check"){
       if(it.once) return !!findOnceRecord(p.id, key);
@@ -3206,11 +3214,16 @@
         if(isSyncGroup) return; // 구분별로 나누지 않고 환자 전체 통합 섹션으로 아래에서 한 번만 표시
         var titleCls = g.group === "단독간호" ? "tag-solo" : (g.group === "추가간호" ? "tag-extra" : "");
         var proxyNote = buildProxyNoteForGroup(p, cat, g.group, mkey);
-        body += '<div class="group-block"><div class="group-title '+titleCls+'">'+escapeHtml(g.group)+proxyNote+'</div>';
+        var gs = computeGroupStatus(p, cat, g, mkey);
+        var groupDot = "";
+        if(gs && gs.required > 0){
+          var gColor = gs.done === gs.required ? "#34A853" : (gs.done === 0 ? "#E24B4A" : "#F0A020");
+          groupDot = '<span class="status-dot" style="background:'+gColor+';margin-right:6px;vertical-align:middle;" title="필수 '+gs.done+'/'+gs.required+'"></span>';
+        }
+        body += '<div class="group-block"><div class="group-title '+titleCls+'">'+groupDot+escapeHtml(g.group)+proxyNote+'</div>';
         (g.items || []).forEach(function(it){
           var key = cat+"|"+g.group+"|"+it.name;
           var required = isItemRequired(it, phase);
-          var reqTag = required ? '<span class="req-tag">필수</span>' : '';
           if(it.type === "check"){
             if(it.syncFromVisit){
               var relevantVisits = findVisitsForGroup(p, cat, g.group, mkey).slice().sort(function(a,b){ return (a.date||"").localeCompare(b.date||""); });
@@ -3225,7 +3238,9 @@
                   body += '<div class="item-row">' +
                     '<input type="checkbox" class="chk" disabled '+(vChecked?'checked':'')+'>' +
                     '<div class="item-main">' +
-                      '<div class="item-label">('+escapeHtml(fmtMD(v.date))+' '+escapeHtml(v.visitType||"")+') '+escapeHtml(it.name)+'</div>' +
+                      '<div class="item-label">('+escapeHtml(fmtMD(v.date))+' '+escapeHtml(v.visitType||"")+') '+escapeHtml(it.name)+
+                        '<span class="status-dot" style="background:'+(vChecked?"#34A853":"#E24B4A")+';margin-left:6px;vertical-align:middle;" title="'+(vChecked?"완료":"미완료")+'"></span>' +
+                      '</div>' +
                     '</div>' +
                   '</div>';
                 });
@@ -3242,11 +3257,12 @@
               recordMkey = mkey;
             }
             var checked = !!(d && d.checked);
+            var reqDot = required ? '<span class="status-dot" style="background:'+(checked?"#34A853":"#E24B4A")+';margin-left:6px;vertical-align:middle;" title="'+(checked?"완료":"미완료")+'"></span>' : '';
             var onceNote = (it.once && checked) ? '<span style="color:var(--ink-soft);">(1회성)</span> ' : '';
             body += '<div class="item-row">' +
               '<input type="checkbox" class="chk" data-act="check" data-pid="'+p.id+'" data-key="'+encodeURIComponent(key)+'" data-mkey="'+mkey+'" '+(checked?'checked':'')+'>' +
               '<div class="item-main">' +
-                '<div class="item-label">'+escapeHtml(it.name)+reqTag+'</div>' +
+                '<div class="item-label">'+escapeHtml(it.name)+reqDot+'</div>' +
                 (checked && S.adminMode ? '<div class="item-meta">'+onceNote+fmtFull(d.date)+' 완료 · '+escapeHtml(d.by)+
                   '<button data-act="uncheck" data-pid="'+p.id+'" data-key="'+encodeURIComponent(key)+'" data-mkey="'+recordMkey+'">취소</button></div>' : '') +
               '</div>' +
@@ -3254,9 +3270,11 @@
           } else {
             var ld = getItemMonthData(p.id, key, mkey);
             var dates = (ld && ld.dates) ? ld.dates : [];
+            var logSatisfied = dates.length > 0;
+            var reqDotLog = required ? '<span class="status-dot" style="background:'+(logSatisfied?"#34A853":"#E24B4A")+';margin-left:6px;vertical-align:middle;" title="'+(logSatisfied?"완료":"미완료")+'"></span>' : '';
             body += '<div class="item-row log-row">' +
               '<div class="item-main">' +
-                '<div class="item-label">'+escapeHtml(it.name)+reqTag+'</div>' +
+                '<div class="item-label">'+escapeHtml(it.name)+reqDotLog+'</div>' +
                 '<div style="display:flex;align-items:center;gap:6px;margin-top:5px;">' +
                   '<input type="date" class="log-date-input" min="'+monthMin+'" max="'+monthMax+'" value="'+defaultLogDate+'" data-pid="'+p.id+'" data-key="'+encodeURIComponent(key)+'">' +
                   '<button class="log-add" data-act="addlog" data-pid="'+p.id+'" data-key="'+encodeURIComponent(key)+'">+ 날짜 추가</button>' +
@@ -3287,14 +3305,20 @@
       .filter(function(v){ return String(v.no) === String(p.no) && visitTypeHasGroupAnywhere(v.visitType, "MINT 일방시"); })
       .sort(function(a,b){ return (a.date||"").localeCompare(b.date||""); });
     if(mintVisits.length > 0){
-      body += '<div class="group-block"><div class="group-title">MINT 일방시' +
+      var mintCheckedCount = mintVisits.filter(function(v){ return v.mintVisit; }).length;
+      var mintGColor = mintCheckedCount === mintVisits.length ? "#34A853" : (mintCheckedCount === 0 ? "#E24B4A" : "#F0A020");
+      body += '<div class="group-block"><div class="group-title">' +
+        '<span class="status-dot" style="background:'+mintGColor+';margin-right:6px;vertical-align:middle;" title="완료 '+mintCheckedCount+'/'+mintVisits.length+'"></span>' +
+        'MINT 일방시' +
         ' <span style="font-size:10.5px;color:var(--ink-soft);font-weight:400;">(이번달 방문목록에서 자동연동)</span></div>';
       mintVisits.forEach(function(v){
         var vChecked = !!v.mintVisit;
         body += '<div class="item-row">' +
           '<input type="checkbox" class="chk" disabled '+(vChecked?'checked':'')+'>' +
           '<div class="item-main">' +
-            '<div class="item-label">('+escapeHtml(fmtMD(v.date))+' '+escapeHtml(v.visitType||"")+') MINT 일방시 점검서식</div>' +
+            '<div class="item-label">('+escapeHtml(fmtMD(v.date))+' '+escapeHtml(v.visitType||"")+') MINT 일방시 점검서식' +
+              '<span class="status-dot" style="background:'+(vChecked?"#34A853":"#E24B4A")+';margin-left:6px;vertical-align:middle;" title="'+(vChecked?"완료":"미완료")+'"></span>' +
+            '</div>' +
           '</div>' +
         '</div>';
       });
