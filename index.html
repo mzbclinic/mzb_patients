@@ -3178,9 +3178,10 @@
       if(status.required === 0){
         return { cat:cat, state:"none", label:cat };
       }
+      var catState = status.done === status.required ? "done" : (status.done === 0 ? "missing" : "partial");
       return {
         cat:cat,
-        state: status.satisfied ? "done" : "missing",
+        state: catState,
         label: cat + " 필수 " + status.done + "/" + status.required
       };
     });
@@ -3373,8 +3374,9 @@
 
   function chipDotColor(state){
     if(state === "done") return "#34A853";
+    if(state === "partial") return "#F0A020";
     if(state === "missing") return "#E24B4A";
-    if(state === "needinfo" || state === "pending") return "#F0A020";
+    if(state === "needinfo" || state === "pending") return "#9E9E9E";
     if(state === "unvisited") return "#C4C4C4";
     return "#DEDEDE";
   }
