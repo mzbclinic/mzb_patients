@@ -26,6 +26,7 @@
     --extra:#fff4c2;
     --extra-text:#8A6D1E;
     --warn:#A23E2A;
+    --amber-dot:#D9A441;
     --warn-soft:#F5E7E3;
     --radius:6px;
     --font: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", sans-serif;
@@ -159,19 +160,22 @@
   /* ---------- Patient list ---------- */
   .toolbar{ display:flex; justify-content:space-between; align-items:center; margin:4px 0 8px; }
   .toolbar h2{ font-size:14px; margin:0; color:var(--ink-soft); font-weight:600; }
+  .patient-list-group{
+    display:flex; flex-direction:column; gap:1px;
+    background:var(--line); border-radius:10px; overflow:hidden;
+  }
   .patient{
-    background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--radius);
-    margin-bottom:10px; overflow:hidden;
+    background:var(--paper-raised); border:none; border-radius:0; margin-bottom:0; overflow:hidden;
   }
   .patient-head{
-    display:flex; align-items:center; gap:10px; padding:12px 14px; cursor:pointer;
+    display:flex; align-items:center; gap:8px; padding:9px 12px; cursor:pointer;
   }
-  .patient-head .chev{ color:var(--ink-soft); font-size:12px; transition:transform .15s; flex:none; }
+  .patient-head .chev{ color:var(--ink-soft); font-size:11px; transition:transform .15s; flex:none; }
   .patient.open .patient-head .chev{ transform:rotate(90deg); }
   .patient-id{
-    font-size:12px; color:var(--ink-soft); font-variant-numeric:tabular-nums; flex:none; width:34px;
+    font-size:10.5px; color:var(--ink-soft); font-variant-numeric:tabular-nums; flex:none;
   }
-  .patient-name{ font-weight:700; font-size:15px; flex:none; }
+  .patient-name{ font-weight:500; font-size:13px; flex:none; }
   .badge{
     font-size:11px; padding:2px 7px; border-radius:20px; font-weight:600; flex:none;
   }
@@ -184,7 +188,8 @@
   .badge.chip-pending{ opacity:.55; }
   .badge.chip-needinfo{ border:1px dashed var(--warn); opacity:.85; }
   .badge.chip-unvisited{ opacity:.5; filter:grayscale(40%); }
-  .patient-badges{ display:flex; gap:5px; flex-wrap:wrap; }
+  .patient-badges{ display:flex; gap:5px; flex-wrap:nowrap; align-items:center; flex:none; margin-left:auto; }
+  .status-dot{ width:8px; height:8px; border-radius:50%; flex:none; display:inline-block; }
   .patient-nurse{ font-size:12px; color:var(--ink-soft); margin-left:auto; text-align:right; flex:none; }
   .patient-body{ display:none; border-top:1px solid var(--line-soft); }
   .patient.open .patient-body{ display:block; }
@@ -215,6 +220,7 @@
   .chk{
     width:19px; height:19px; margin-top:1px; flex:none; accent-color:var(--teal); cursor:pointer;
   }
+  .chk-hira{ accent-color:#bfe1f6; }
   .item-main{ flex:1; min-width:0; }
   .item-label{ font-size:14px; }
   .req-tag{ font-size:10px; font-weight:700; color:var(--warn); background:var(--warn-soft); border-radius:4px; padding:1px 5px; margin-left:6px; vertical-align:middle; }
@@ -324,12 +330,12 @@
   .checklist-two-col{ display:flex; gap:14px; align-items:flex-start; }
   .checklist-col{ flex:1 1 0; min-width:0; border-radius:8px; padding:6px 8px 10px; }
   .checklist-col.col-assigned{ background:var(--home-soft); }
-  .checklist-col.col-unassigned{ background:var(--visit); }
+  .checklist-col.col-unassigned{ background:var(--line-soft); }
   .checklist-col .checklist-subsection-header{ margin-top:2px; }
   @media (max-width:680px){
     .checklist-two-col{ flex-direction:column; }
   }
-  .virtual-patient{ border-style:dashed; }
+  .virtual-patient{ background:var(--paper); }
   .checklist-section-divider{
     height:1px; background:var(--line); margin:18px 0 10px;
     position:relative;
@@ -355,7 +361,13 @@
   .tf-input:focus{ border-color:var(--teal); outline:none; }
 
   /* ---------- 환자배정 관리 테이블 ---------- */
-  .assign-table-wrap{ overflow-x:auto; -webkit-overflow-scrolling:touch; background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--radius); }
+  .assign-table-wrap{
+    overflow-x:auto; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--radius);
+    max-height:min(65vh, 620px);
+  }
+  .assign-table-wrap thead{ position:sticky; top:0; z-index:3; }
+  .assign-table-wrap thead th{ background:var(--paper-raised); }
   .assign-table{ width:100%; border-collapse:collapse; font-size:13px; min-width:620px; }
   .assign-table th, .assign-table td{ padding:9px 10px; border-bottom:1px solid var(--line-soft); text-align:left; white-space:nowrap; }
   .assign-table th{ color:var(--ink-soft); font-weight:600; font-size:11.5px; background:var(--paper); }
@@ -639,6 +651,10 @@
     var p = dateStr.split("-");
     return p[1] + "/" + p[2];
   }
+  function fmtMDDash(dateStr){
+    var p = dateStr.split("-");
+    return p[1] + "-" + p[2];
+  }
   function fmtFull(dateStr){
     var p = dateStr.split("-");
     return p[0] + "." + p[1] + "." + p[2];
@@ -649,6 +665,12 @@
     var d = new Date(dateStr + "T00:00:00");
     var wd = isNaN(d.getTime()) ? "" : WEEKDAY_KR[d.getDay()];
     return p[1] + p[2] + (wd ? "("+wd+")" : "");
+  }
+  function fmtMDDashWeekday(dateStr){
+    var p = dateStr.split("-");
+    var d = new Date(dateStr + "T00:00:00");
+    var wd = isNaN(d.getTime()) ? "" : WEEKDAY_KR[d.getDay()];
+    return p[1] + "-" + p[2] + (wd ? "("+wd+")" : "");
   }
   function uid(prefix){ return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
@@ -1528,7 +1550,10 @@
 
     var html = '<div class="toolbar">' +
       '<h2>환자배정 관리</h2>' +
-      '<button class="btn btn-teal" id="addPatientBtnAssign">+ 새 환자 등록</button>' +
+      '<div style="display:flex;gap:8px;">' +
+        '<button class="btn btn-sm" id="assignSearchBtn">검색</button>' +
+        '<button class="btn btn-teal" id="addPatientBtnAssign">+ 새 환자 등록</button>' +
+      '</div>' +
     '</div>';
 
     html += '<div class="assign-table-wrap"><table class="assign-table"><thead><tr>' +
@@ -1568,6 +1593,9 @@
     el.innerHTML = html;
 
     document.getElementById("addPatientBtnAssign").addEventListener("click", function(){ openAddPatientModal(); });
+    document.getElementById("assignSearchBtn").addEventListener("click", function(){
+      applyPendingTextFilters("assignment", renderAssignmentView);
+    });
     el.querySelectorAll('[data-act="editassign"]').forEach(function(btn){
       btn.addEventListener("click", function(){ openAddPatientModal(btn.getAttribute("data-pid")); });
     });
@@ -1599,6 +1627,16 @@
       }
       return '<td><input type="text" class="tf-input" data-tf-table="'+tableId+'" data-tf-key="'+col.key+'" value="'+escapeHtml(filters[col.key]||"")+'" placeholder="검색"></td>';
     }).join("") + '</tr>';
+  }
+
+  // 표 안의 텍스트/달력형 필터 입력값을 지금 상태 그대로 한꺼번에 적용합니다. (모바일에서 엔터가 잘 안 먹는 문제 대응)
+  function applyPendingTextFilters(tableId, renderFn){
+    document.querySelectorAll('.tf-input[data-tf-table="'+tableId+'"]').forEach(function(inp){
+      if(inp.tagName === "SELECT") return; // 선택형은 이미 즉시 적용되어 있음
+      var key = inp.getAttribute("data-tf-key");
+      S.tableFilters[tableId][key] = inp.value.trim();
+    });
+    renderFn();
   }
 
   function bindFilterHeaderRow(el, tableId, onChangeRender){
@@ -1727,6 +1765,7 @@
         '<option value="registeredDate"'+(S.candidateSort==="registeredDate"?" selected":"")+'>등록날짜순</option>' +
         '<option value="nurse"'+(S.candidateSort==="nurse"?" selected":"")+'>담당간호사순</option>' +
       '</select>' +
+      '<button class="btn btn-sm btn-teal" id="candSearchBtn">검색</button>' +
     '</div>';
 
     html += '<div class="assign-table-wrap"><table class="assign-table"><thead><tr>' +
@@ -1782,6 +1821,9 @@
     document.getElementById("candSortSelect").addEventListener("change", function(e){
       S.candidateSort = e.target.value;
       renderCandidateView();
+    });
+    document.getElementById("candSearchBtn").addEventListener("click", function(){
+      applyPendingTextFilters("candidates", renderCandidateView);
     });
     el.querySelectorAll('[data-act="editcand"]').forEach(function(btn){
       btn.addEventListener("click", function(){ openCandidateModal(btn.getAttribute("data-cid")); });
@@ -2045,6 +2087,13 @@
     "전송이": { bg:"#C0CA33", color:"#4a4a10" },
     "안혜리": { bg:"#F6BF26", color:"#6b4f00" }
   };
+  // 위 간호사 색상을 흰색에 섞어 은은하게 만든 파스텔톤 (체크리스트 "담당환자방문" 배경용 - 원색을 그대로 쓰면 눈이 피로해서 순화함)
+  // 너무 많이 희석하면 색끼리 구분이 잘 안 되어서(특히 전송이/안혜리가 둘 다 노란빛), 원래 색의 특징이 남을 정도로만 섞음
+  var NURSE_PASTEL_BG = {
+    "김혜경": "#F8DAD8",
+    "전송이": "#EDF0C6",
+    "안혜리": "#FCEDC2"
+  };
   function renderVisitNurseBadge(name){
     if(!name) return "";
     var c = VISIT_NURSE_COLOR_MAP[name];
@@ -2153,6 +2202,10 @@
           var mVal = tf.mintVisit === "yes";
           if(!!v.mintVisit !== mVal) return false;
         }
+        if(tf.hiraLinked){
+          var hVal = tf.hiraLinked === "yes";
+          if(!!v.hiraLinked !== hVal) return false;
+        }
         return true;
       })
       .sort(function(a,b){
@@ -2171,6 +2224,7 @@
       '<div style="display:flex;gap:8px;">' +
         (S.adminMode ? '<button class="btn btn-sm" id="toggleVisitStats">'+(S.visitStatsOpen?"방문통계 닫기":"간호사별 방문통계")+'</button>' : '') +
         (S.adminMode ? '<button class="btn btn-sm" id="toggleMintStats">'+(S.mintStatsOpen?"일방시 통계 닫기":"일방시 입력통계")+'</button>' : '') +
+        '<button class="btn btn-sm" id="visitSearchBtn">검색</button>' +
         '<button class="btn btn-teal" id="addVisitBtn">+ 새 방문 등록</button>' +
       '</div>' +
     '</div>';
@@ -2182,41 +2236,46 @@
       html += buildMintStatsHtml();
     }
 
+    var showVisitNo = S.adminMode;
+    var totalCols = showVisitNo ? 11 : 10;
+
     html += '<div class="assign-table-wrap"><table class="assign-table visit-table"><thead><tr>' +
-      '<th>연번</th><th>방문일자</th><th>방문번호</th><th>이름</th><th>방문유형</th><th>방문간호사</th>' +
-      '<th>간호메모</th><th>LAB</th><th>비고</th><th>MINT<br>일방시</th>' +
+      '<th>연번</th><th>방문일자</th>' + (showVisitNo ? '<th>방문번호</th>' : '') + '<th>이름</th><th>방문유형</th><th>방문간호사</th>' +
+      '<th>간호메모</th><th>LAB</th><th>비고</th><th>MINT<br>일방시</th><th>HIRA<br>연동</th>' +
     '</tr>' +
     buildFilterHeaderRow("visits", [
       { key:"seq", type:"none" },
-      { key:"date", type:"none" },
-      { key:"visitNo", type:"none" },
+      { key:"date", type:"none" }
+    ].concat(showVisitNo ? [{ key:"visitNo", type:"none" }] : []).concat([
       { key:"name", type:"text" },
       { key:"visitType", type:"select", options: VISIT_TYPES.map(function(t){ return {value:t,label:t}; }) },
       { key:"nurse", type:"select", options: [{value:"__none__",label:"미기재"}].concat(S.staff.map(function(n){ return {value:n,label:n}; })) },
       { key:"memo", type:"none" },
       { key:"bloodTest", type:"none" },
       { key:"note", type:"none" },
-      { key:"mintVisit", type:"select", options:[{value:"yes",label:"O"},{value:"no",label:"-"}] }
-    ]) +
+      { key:"mintVisit", type:"select", options:[{value:"yes",label:"O"},{value:"no",label:"-"}] },
+      { key:"hiraLinked", type:"select", options:[{value:"yes",label:"O"},{value:"no",label:"-"}] }
+    ])) +
     '</thead><tbody>';
 
     if(list.length === 0){
-      html += '<tr><td colspan="10" style="text-align:center;color:var(--ink-soft);padding:24px;">이 달에 등록된 방문 기록이 없습니다.</td></tr>';
+      html += '<tr><td colspan="'+totalCols+'" style="text-align:center;color:var(--ink-soft);padding:24px;">이 달에 등록된 방문 기록이 없습니다.</td></tr>';
     } else {
       list.forEach(function(v, idx){
         html += '<tr>' +
           '<td style="color:var(--ink-soft);font-variant-numeric:tabular-nums;">'+(idx+1)+'</td>' +
-          '<td style="font-variant-numeric:tabular-nums;white-space:nowrap;">'+escapeHtml(fmtMDWeekday(v.date))+'</td>' +
-          '<td style="font-variant-numeric:tabular-nums;">'+escapeHtml(v.visitNo)+'</td>' +
+          '<td style="font-variant-numeric:tabular-nums;white-space:nowrap;">'+escapeHtml(fmtMDDashWeekday(v.date))+'</td>' +
+          (showVisitNo ? '<td style="font-variant-numeric:tabular-nums;">'+escapeHtml(v.visitNo)+'</td>' : '') +
           '<td style="font-weight:600;cursor:pointer;" data-act="editvisit" data-vid="'+v.id+'" title="더블클릭하면 수정할 수 있습니다">'+escapeHtml(v.name)+'</td>' +
           '<td>'+renderVisitTypeBadge(v.visitType||"")+'</td>' +
           '<td>'+renderVisitNurseBadge(v.nurse||"")+'</td>' +
           '<td class="memo-cell"><textarea class="inline-edit" rows="1" data-act="editmemo" data-vid="'+v.id+'">'+escapeHtml(v.memo||"")+'</textarea></td>' +
           '<td>'+(v.bloodTest ? '<input type="checkbox" class="chk" data-act="toggleblood" data-vid="'+v.id+'" checked>' : '<input type="checkbox" class="chk" data-act="toggleblood" data-vid="'+v.id+'">')+'</td>' +
           '<td class="memo-cell"><textarea class="inline-edit" rows="1" data-act="editnote" data-vid="'+v.id+'">'+escapeHtml(v.note||"")+'</textarea></td>' +
-          '<td>'+(v.mintVisit ? '<input type="checkbox" class="chk" data-act="togglemint" data-vid="'+v.id+'" checked>' : '<input type="checkbox" class="chk" data-act="togglemint" data-vid="'+v.id+'">')+
+          '<td>'+(v.mintVisit ? '<input type="checkbox" class="chk chk-mint" data-act="togglemint" data-vid="'+v.id+'" checked>' : '<input type="checkbox" class="chk chk-mint" data-act="togglemint" data-vid="'+v.id+'">')+
             (S.adminMode && v.mintVisit ? ' <span class="mint-by" data-act="editmintby" data-vid="'+v.id+'" title="클릭하면 체크한 사람을 바꿀 수 있습니다">'+escapeHtml(v.mintCheckedBy||"미지정")+'</span>' : '') +
           '</td>' +
+          '<td>'+(v.hiraLinked ? '<input type="checkbox" class="chk chk-hira" data-act="togglehira" data-vid="'+v.id+'" checked>' : '<input type="checkbox" class="chk chk-hira" data-act="togglehira" data-vid="'+v.id+'">')+'</td>' +
         '</tr>';
       });
     }
@@ -2235,6 +2294,9 @@
       switchVisitMonth(y, m);
     });
     document.getElementById("addVisitBtn").addEventListener("click", function(){ openVisitModal(); });
+    document.getElementById("visitSearchBtn").addEventListener("click", function(){
+      applyPendingTextFilters("visits", renderVisitsView);
+    });
     var statsBtn = document.getElementById("toggleVisitStats");
     if(statsBtn){
       statsBtn.addEventListener("click", function(){
@@ -2267,6 +2329,17 @@
         await saveVisitsForMonth(S.visitLogYear, S.visitLogMonth, S.visits);
         showToast(v.mintVisit ? "MINT 일방시 체크되었습니다." : "MINT 일방시 체크 해제되었습니다.");
         renderVisitsView();
+      });
+    });
+    el.querySelectorAll('[data-act="togglehira"]').forEach(function(chk){
+      chk.addEventListener("click", function(ev){ ev.stopPropagation(); });
+      chk.addEventListener("change", async function(e){
+        var vid = e.target.getAttribute("data-vid");
+        var v = S.visits.find(function(x){ return x.id === vid; });
+        if(!v) return;
+        v.hiraLinked = e.target.checked;
+        await saveVisitsForMonth(S.visitLogYear, S.visitLogMonth, S.visits);
+        showToast(v.hiraLinked ? "HIRA 연동 체크되었습니다." : "HIRA 연동 체크 해제되었습니다.");
       });
     });
     el.querySelectorAll('[data-act="editmintby"]').forEach(function(span){
@@ -2428,7 +2501,7 @@
       var oldDate = editing ? editing.date : null;
       var oldVisitType = editing ? editing.visitType : null;
 
-      var record = editing || { id: uid("v"), createdAt: todayStr(), bloodTest:false, mintVisit:false };
+      var record = editing || { id: uid("v"), createdAt: todayStr(), bloodTest:false, mintVisit:false, hiraLinked:false };
       record.no = no; record.name = name; record.date = date; record.visitNo = visitNo;
       record.visitType = visitType; record.nurse = nurse; record.memo = memo; record.note = note;
 
@@ -2514,6 +2587,12 @@
     await storageSet(K_BLOODTESTS, S.bloodTests, true);
   }
 
+  function getNurseForNo(no){
+    if(!no) return "";
+    var p = S.patients.find(function(x){ return String(x.no) === String(no); });
+    return p ? (p.nurse || "") : "";
+  }
+
   function renderBloodTestView(){
     var el = document.getElementById("bloodTestView");
     if(!el) return;
@@ -2525,6 +2604,10 @@
         if(!rowTextMatches(b.name, tf.name)) return false;
         if(!rowSelectMatches(b.type, tf.type)) return false;
         if(!rowSelectMatches(b.resultStatus, tf.resultStatus)) return false;
+        if(tf.nurse){
+          var nurseVal = tf.nurse === "__unassigned__" ? "" : tf.nurse;
+          if(getNurseForNo(b.no) !== nurseVal) return false;
+        }
         return true;
       })
       .sort(function(a,b){
@@ -2533,16 +2616,20 @@
     var waitingCount = S.bloodTests.filter(function(b){ return b.resultStatus === "대기중"; }).length;
 
     var html = '<div class="toolbar"><h2>혈액검사 <span style="font-weight:400;color:var(--ink-soft);font-size:12.5px;">(전체 '+S.bloodTests.length+'건 · 대기중 '+waitingCount+'건)</span></h2>' +
-      '<button class="btn btn-teal" id="addBloodTestBtn">+ 새 검사 등록</button></div>';
+      '<div style="display:flex;gap:8px;">' +
+        '<button class="btn btn-sm" id="bloodSearchBtn">검색</button>' +
+        '<button class="btn btn-teal" id="addBloodTestBtn">+ 새 검사 등록</button>' +
+      '</div></div>';
 
     html += '<div class="assign-table-wrap"><table class="assign-table"><thead><tr>' +
-      '<th>처방일자</th><th>식별자</th><th>등록번호</th><th>이름</th><th>유형</th><th>결과통보</th><th>비고</th><th></th>' +
+      '<th>처방일자</th><th>식별자</th><th>등록번호</th><th>이름</th><th>담당간호사</th><th>유형</th><th>결과통보</th><th>비고</th><th></th>' +
     '</tr>' +
     buildFilterHeaderRow("bloodtest", [
       { key:"prescribedDate", type:"none" },
       { key:"identifier", type:"none" },
       { key:"no", type:"text" },
       { key:"name", type:"text" },
+      { key:"nurse", type:"select", options: [{value:"__unassigned__",label:"미배정"}].concat(S.staff.map(function(n){ return {value:n,label:n}; })) },
       { key:"type", type:"select", options: BLOODTEST_TYPES.map(function(t){ return {value:t,label:t}; }) },
       { key:"resultStatus", type:"select", options: BLOODTEST_STATUS.map(function(s){ return {value:s,label:s}; }) },
       { key:"note", type:"none" },
@@ -2551,7 +2638,7 @@
     '</thead><tbody>';
 
     if(list.length === 0){
-      html += '<tr><td colspan="8" style="text-align:center;color:var(--ink-soft);padding:24px;">등록된 혈액검사가 없습니다.</td></tr>';
+      html += '<tr><td colspan="9" style="text-align:center;color:var(--ink-soft);padding:24px;">등록된 혈액검사가 없습니다.</td></tr>';
     } else {
       list.forEach(function(b){
         var checked = b.resultStatus === "결과통보";
@@ -2559,11 +2646,13 @@
           '<input type="checkbox" class="chk" data-act="togglestatus" data-bid="'+b.id+'" '+(checked?'checked':'')+'>' +
           '<span style="font-size:12px;color:'+(checked?'var(--teal)':'var(--ink-soft)')+';">'+(checked?'결과통보':'대기중')+'</span>' +
         '</label>';
+        var nurseName = getNurseForNo(b.no);
         html += '<tr>' +
           '<td>'+escapeHtml(b.prescribedDate||"")+'</td>' +
           '<td style="font-variant-numeric:tabular-nums;">'+escapeHtml(b.identifier||"")+'</td>' +
           '<td>'+escapeHtml(b.no||"")+'</td>' +
           '<td style="font-weight:600;">'+escapeHtml(b.name||"")+'</td>' +
+          '<td>'+(nurseName ? escapeHtml(nurseName) : '<span style="color:var(--ink-soft);">미배정</span>')+'</td>' +
           '<td>'+escapeHtml(b.type||"")+'</td>' +
           '<td>'+statusTag+'</td>' +
           '<td class="memo-cell"><input type="text" class="inline-edit" data-act="editbloodnote" data-bid="'+b.id+'" value="'+escapeHtml(b.note||"")+'"></td>' +
@@ -2576,6 +2665,9 @@
     el.innerHTML = html;
 
     document.getElementById("addBloodTestBtn").addEventListener("click", function(){ openBloodTestModal(); });
+    document.getElementById("bloodSearchBtn").addEventListener("click", function(){
+      applyPendingTextFilters("bloodtest", renderBloodTestView);
+    });
     el.querySelectorAll('[data-act="editblood"]').forEach(function(btn){
       btn.addEventListener("click", function(){ openBloodTestModal(btn.getAttribute("data-bid")); });
     });
@@ -3255,6 +3347,14 @@
     '</table></div>';
   }
 
+  function chipDotColor(state){
+    if(state === "done") return "#34A853";
+    if(state === "missing") return "#E24B4A";
+    if(state === "needinfo" || state === "pending") return "#F0A020";
+    if(state === "unvisited") return "#C4C4C4";
+    return "#DEDEDE";
+  }
+
   function renderOnePatientCard(p, mkey, isYear){
     var isOpen = !!S.openPatients[p.id];
     var badges;
@@ -3263,10 +3363,9 @@
     } else {
       var chips = patientCategoryChips(p);
       badges = chips.map(function(c){
-        var stateClass = c.state==="done" ? "chip-done" : (c.state==="missing" ? "chip-missing" : (c.state==="needinfo" ? "chip-needinfo" : (c.state==="unvisited" ? "chip-unvisited" : "chip-pending")));
-        return '<span class="badge badge-'+c.cat+' '+stateClass+'">'+escapeHtml(c.label)+'</span>';
+        return '<span class="status-dot" style="background:'+chipDotColor(c.state)+';" title="'+escapeHtml(c.label)+'"></span>';
       }).join("");
-      if(p.isVirtual){ badges += '<span class="badge badge-미지정">환자배정 미등록</span>'; }
+      if(p.isVirtual){ badges += '<span class="status-dot" style="background:var(--line);" title="환자배정 미등록"></span>'; }
     }
 
     var body = isYear ? buildYearBody(p, S.year) : buildMonthBody(p, mkey);
@@ -3283,10 +3382,10 @@
 
     return '<div class="patient '+(isOpen?'open':'')+(p.isVirtual?' virtual-patient':'')+'" data-patient-card="'+p.id+'">' +
       '<div class="patient-head" data-act="toggle" data-pid="'+p.id+'">' +
-        '<span class="chev">▸</span>' +
         '<span class="patient-id">#'+escapeHtml(p.no||"")+'</span>' +
         '<span class="patient-name">'+escapeHtml(p.name)+'</span>' +
         '<span class="patient-badges">'+badges+'</span>' +
+        '<span class="chev">▸</span>' +
       '</div>' +
       '<div class="patient-body">' + body + footer + '</div>' +
     '</div>';
@@ -3380,7 +3479,7 @@
     if(isYear){
       // 연간 보기에서는 구분 없이 가나다순 단일 목록
       var yearList = baseList.slice().sort(byName);
-      wrap.innerHTML = yearList.map(function(p){ return renderOnePatientCard(p, mkey, true); }).join("");
+      wrap.innerHTML = '<div class="patient-list-group">'+yearList.map(function(p){ return renderOnePatientCard(p, mkey, true); }).join("")+'</div>';
       bindPatientListEvents();
       return;
     }
@@ -3404,22 +3503,28 @@
 
     var html = '<div class="checklist-section-header section-visited">' +
         '<span>● 이번달 방문목록에 있음 (' + totalTopCount + '명)</span>' +
-        '<input type="text" id="checklistTopSearchInput" class="tf-input" style="max-width:160px;" placeholder="이름 검색" value="'+escapeHtml(S.checklistTopSearch||"")+'">' +
+        '<span style="display:flex;gap:6px;">' +
+          '<input type="text" id="checklistTopSearchInput" class="tf-input" style="max-width:140px;" placeholder="이름 검색" value="'+escapeHtml(S.checklistTopSearch||"")+'">' +
+          '<button class="btn btn-sm" id="checklistTopSearchBtn">검색</button>' +
+        '</span>' +
       '</div>';
 
     if(totalTopCount){
+      var nursePastelBg = NURSE_PASTEL_BG[S.who] || "var(--home-soft)";
       html += '<div class="checklist-two-col">' +
-        '<div class="checklist-col col-assigned">' +
-          '<div class="checklist-subsection-header sub-assigned">담당환자방문 (' + topAssigned.length + '명)</div>' +
+        '<div class="checklist-col col-assigned" style="background:'+nursePastelBg+';">' +
+          '<div class="checklist-subsection-header sub-assigned">담당환자방문 · ' + topAssigned.length + '명</div>' +
           (topAssigned.length
-            ? topAssigned.map(function(p){ return renderOnePatientCard(p, mkey, false); }).join("")
+            ? '<div class="patient-list-group">'+topAssigned.map(function(p){ return renderOnePatientCard(p, mkey, false); }).join("")+'</div>'
             : '<div class="empty-note" style="padding:8px 4px;">해당 없음</div>') +
         '</div>' +
         '<div class="checklist-col col-unassigned">' +
-          '<div class="checklist-subsection-header sub-unassigned">비담당환자방문 (' + totalUnassignedCount + '명)</div>' +
+          '<div class="checklist-subsection-header sub-unassigned">비담당환자방문 · ' + totalUnassignedCount + '명</div>' +
           (totalUnassignedCount
-            ? topUnassignedReal.map(function(p){ return renderOnePatientCard(p, mkey, false); }).join("") +
-              orphanVisits.map(function(o){ return renderOnePatientCard(o, mkey, false); }).join("")
+            ? '<div class="patient-list-group">'+
+                topUnassignedReal.map(function(p){ return renderOnePatientCard(p, mkey, false); }).join("") +
+                orphanVisits.map(function(o){ return renderOnePatientCard(o, mkey, false); }).join("") +
+              '</div>'
             : '<div class="empty-note" style="padding:8px 4px;">해당 없음</div>') +
         '</div>' +
       '</div>';
@@ -3430,7 +3535,7 @@
     html += '<div class="checklist-section-divider"></div>';
     html += '<div class="checklist-section-header section-novisit"><span>○ 이번달 방문목록에 없음 (' + bottomList.length + '명)</span></div>';
     html += bottomList.length
-      ? bottomList.map(function(p){ return renderOnePatientCard(p, mkey, false); }).join("")
+      ? '<div class="patient-list-group">'+bottomList.map(function(p){ return renderOnePatientCard(p, mkey, false); }).join("")+'</div>'
       : '<div class="empty-note" style="padding:10px 4px;">전부 이번달 방문목록에 올라와 있습니다.</div>';
 
     wrap.innerHTML = html;
@@ -3442,6 +3547,13 @@
         if(e.key !== "Enter") return;
         e.preventDefault();
         S.checklistTopSearch = e.target.value.trim();
+        renderPatientList();
+      });
+    }
+    var searchBtn = document.getElementById("checklistTopSearchBtn");
+    if(searchBtn){
+      searchBtn.addEventListener("click", function(){
+        S.checklistTopSearch = document.getElementById("checklistTopSearchInput").value.trim();
         renderPatientList();
       });
     }
@@ -4237,17 +4349,16 @@
   async function bootstrap(){
     var existing = loadSession();
     if(existing && existing.token){
+      // 예전에는 여기서 kv_get 하나로 토큰이 유효한지 먼저 확인한 뒤에
+      // init()에서 또 한 번 데이터를 불러왔는데, 그러면 매번 접속할 때마다
+      // 구글 Apps Script를 2번 연달아 호출하게 되어(각각 콜드스타트 비용 발생)
+      // 체감 로딩이 느려졌습니다. 토큰이 만료된 경우는 init()의 조회 자체가
+      // 실패하면서 handleApiError()가 자동으로 로그인 화면으로 되돌리므로,
+      // 여기서는 별도 확인 없이 바로 진행합니다(정상 케이스에서 왕복 1회 절감).
       SESSION = existing;
-      // 저장된 토큰이 아직 유효한지 가볍게 확인
-      try{
-        var check = await apiCall("kv_get", { key: K_TEMPLATES });
-        if(check && check.ok){
-          initLogoutButton();
-          startApp();
-          return;
-        }
-      }catch(e){ /* 아래로 진행해 로그인 화면 표시 */ }
-      saveSession(null);
+      initLogoutButton();
+      startApp();
+      return;
     }
     initLogoutButton();
     initLoginScreen();
