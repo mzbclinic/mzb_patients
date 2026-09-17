@@ -3187,14 +3187,43 @@
     if(!phase) return null;
     var groups = S.templates[cat] || [];
     var required = 0, done = 0, missing = [];
-    groups.forEach(function(g){
-      g.items.forEach(function(it){
-        if(!isItemRequired(it, phase)) return;
-        required++;
-        if(isItemSatisfied(p, cat, g.group, it, mkey)) done++;
-        else missing.push({group:g.group, name:it.name});
+
+    if(cat === "장주사"){
+      // 장주사는 한 달에 여러 번 방문할 수 있고, "장주서식" 항목은 방문 건별로 따로 체크합니다(키에 방문ID 접미사).
+      // 그래서 전체 충족 여부도 방문 건마다 따로 계산해서 합산해야 합니다 (안 그러면 접미사 없는 옛 키만 보다가 영원히 미완료로 남음).
+      var jangjusaVisits = (S.visitsCache[mkey] || []).filter(function(v){
+        return String(v.no) === String(p.no) && getVisitCategories(v.visitType).indexOf("장주사") !== -1;
+      }).sort(function(a,b){ return (a.date||"").localeCompare(b.date||""); });
+
+      groups.forEach(function(g){
+        if(g.group === "장주서식" && jangjusaVisits.length > 0){
+          jangjusaVisits.forEach(function(v){
+            g.items.forEach(function(it){
+              if(!isItemRequired(it, phase)) return;
+              required++;
+              if(isItemSatisfied(p, cat, g.group, it, mkey, "|"+v.id)) done++;
+              else missing.push({ group:g.group, name:it.name+" ("+fmtMD(v.date)+")" });
+            });
+          });
+        } else {
+          g.items.forEach(function(it){
+            if(!isItemRequired(it, phase)) return;
+            required++;
+            if(isItemSatisfied(p, cat, g.group, it, mkey)) done++;
+            else missing.push({ group:g.group, name:it.name });
+          });
+        }
       });
-    });
+    } else {
+      groups.forEach(function(g){
+        g.items.forEach(function(it){
+          if(!isItemRequired(it, phase)) return;
+          required++;
+          if(isItemSatisfied(p, cat, g.group, it, mkey)) done++;
+          else missing.push({group:g.group, name:it.name});
+        });
+      });
+    }
     return { phase:phase, required:required, done:done, missing:missing, satisfied: missing.length===0 };
   }
 
@@ -3229,16 +3258,41 @@
 
   // 특정 구분(재택/일방시/장주사)의 상황판 HTML 생성: 그룹별 요약 + 환자별 O/X 표
   // 이번달에 그 구분(cat)으로 2번 이상 방문한 환자 목록 (참고용 안내에 사용)
+  // "2회 이상 방문" 참고 안내 대상 방문유형. 일방시는 이미 방문 건별로 MINT를 자동으로 여러 줄 보여주는
+  // 별도 처리가 있어서 제외합니다. 재택은 "재택포괄/재택정기방문"만 세고, 단독간호는 재택관리의 한 요소일
+  // 뿐이라 별도 방문으로 세지 않습니다.
+  var MULTI_VISIT_COUNT_TYPES = {
+    "재택": ["재택포괄", "재택정기방문"],
+    "장주사": ["장주사포괄", "장주사중간", "장주사의간동반", "장주사단독간호"]
+  };
   function getMultiVisitPatients(cat, mkey){
+    var countTypes = MULTI_VISIT_COUNT_TYPES[cat];
+    if(!countTypes) return [];
     return getNurseFilteredPatients()
       .filter(function(p){ return !!p.nurse && (p.categories||[]).indexOf(cat) !== -1; })
       .map(function(p){
         var count = (S.visitsCache[mkey] || []).filter(function(v){
-          return String(v.no) === String(p.no) && getVisitCategories(v.visitType).indexOf(cat) !== -1;
+          return String(v.no) === String(p.no) && countTypes.indexOf(v.visitType) !== -1;
         }).length;
         return { p:p, count:count };
       })
       .filter(function(r){ return r.count >= 2; });
+  }
+
+  // 장주사의 "장주서식"처럼 방문 건별로 따로 체크하는 그룹은, 그 달의 모든 방문 건이 다 채워져야 충족으로 봅니다.
+  function isCategoryGroupSatisfiedForPatient(p, cat, g, mkey){
+    if(cat === "장주사" && g.group === "장주서식"){
+      var visits = (S.visitsCache[mkey] || []).filter(function(v){
+        return String(v.no) === String(p.no) && getVisitCategories(v.visitType).indexOf("장주사") !== -1;
+      });
+      if(visits.length === 0) return true;
+      return visits.every(function(v){
+        var gs = computeGroupStatus(p, cat, g, mkey, "|"+v.id);
+        return !!(gs && gs.satisfied);
+      });
+    }
+    var gs = computeGroupStatus(p, cat, g, mkey);
+    return !!(gs && gs.satisfied);
   }
 
   function buildCategoryBoard(cat, mkey){
@@ -3256,7 +3310,7 @@
     if(multiVisitPatients.length > 0){
       summaryHtml += '<div style="background:var(--warn-soft);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:var(--warn);">' +
         multiVisitPatients.map(function(r){
-          return '⚠ '+escapeHtml(r.p.name)+' 님은 이번달 '+escapeHtml(cat)+' 방문이 '+r.count+'회 이상입니다. 2회차 이후 방문에 대한 필수 입력 확인 바랍니다.';
+          return '⚠ '+escapeHtml(r.p.name)+' 님은 이번달 '+escapeHtml(cat)+' 방문이 '+r.count+'회 이상입니다. 확인바랍니다.';
         }).join('<br>') +
       '</div>';
     }
@@ -3270,8 +3324,7 @@
       } else {
         var done = 0;
         activePatients.forEach(function(p){
-          var gs = computeGroupStatus(p, cat, g, mkey);
-          if(gs && gs.satisfied) done++;
+          if(isCategoryGroupSatisfiedForPatient(p, cat, g, mkey)) done++;
         });
         summaryHtml += '<div class="board-metric"><div class="board-metric-label">'+escapeHtml(g.group)+'</div><div class="board-metric-value">'+done+'/'+activePatients.length+'</div></div>';
       }
@@ -3292,8 +3345,7 @@
           if(groupIsOptionalLog(g)){
             tableHtml += '<td style="text-align:center;">'+getGroupLogCount(p, cat, g, mkey)+'</td>';
           } else {
-            var gs = computeGroupStatus(p, cat, g, mkey);
-            var ok = gs && gs.satisfied;
+            var ok = isCategoryGroupSatisfiedForPatient(p, cat, g, mkey);
             tableHtml += '<td style="text-align:center;" class="'+(ok?'visit-check-yes':'visit-check-no')+'">'+(ok?'O':'X')+'</td>';
           }
         });
@@ -3361,14 +3413,19 @@
     return { overall:overall, unassigned:unassigned, byNurse:byNurse, missingList:missingList };
   }
 
+  // 등록/시작월과 무관하게, 실제로 이번달 방문 기록이 있는지 (방문유형 상관없이 아무 방문이나)
+  function patientHasAnyVisitThisMonth(p, mkey){
+    return (S.visitsCache[mkey] || []).some(function(v){ return String(v.no) === String(p.no); });
+  }
+
   function renderDashboard(){
     var mkey = monthKey(S.year, S.month);
     var stats = buildCompletionStats(mkey);
 
-    // "담당환자"는 이제 고정환자(담당간호사가 지정된 환자)만 셉니다.
+    // "담당환자"는 고정환자(담당간호사가 지정된 환자) 중, 이번달에 실제로 방문한 사람만 셉니다.
     var visibleCount = (S.who === "전체")
-      ? S.patients.filter(function(p){ return !!p.nurse && isPatientVisibleForCurrentView(p); }).length
-      : getNurseFilteredPatients().filter(isPatientVisibleForCurrentView).length;
+      ? S.patients.filter(function(p){ return !!p.nurse && patientHasAnyVisitThisMonth(p, mkey); }).length
+      : getNurseFilteredPatients().filter(function(p){ return patientHasAnyVisitThisMonth(p, mkey); }).length;
     var scoped = (S.who === "전체") ? stats.overall : (stats.byNurse[S.who] || {});
 
     document.getElementById("statPatients").textContent = visibleCount;
@@ -3380,8 +3437,8 @@
       document.getElementById(elId).title = hasMulti ? "이번달 "+c+" 방문이 2회 이상인 환자가 있습니다. 눌러서 상황판에서 확인하세요." : "";
     });
 
-    // 우측: 비담당환자(담당간호사 미지정) 현황. 특정 간호사에게 속하지 않으므로 전체 기준으로 항상 표시합니다.
-    var unassignedCount = S.patients.filter(function(p){ return !p.nurse && isPatientVisibleForCurrentView(p); }).length;
+    // 우측: 비담당환자(담당간호사 미지정) 중 이번달에 실제로 방문한 사람만.
+    var unassignedCount = S.patients.filter(function(p){ return !p.nurse && patientHasAnyVisitThisMonth(p, mkey); }).length;
     document.getElementById("statUnassigned").textContent = unassignedCount;
     var uv = stats.unassigned["일방시"] || { done:0, total:0 };
     document.getElementById("statUnassignedVisit").textContent = uv.done + "/" + uv.total;
@@ -3746,11 +3803,24 @@
       if(p.isVirtual){ badges += '<span class="status-dot" style="background:var(--line);" title="환자배정 미등록"></span>'; }
 
       var thisMonthVisits = (S.visitsCache[mkey] || []).filter(function(v){ return String(v.no) === String(p.no); });
-      var distinctTypes = [];
+      // 이름 옆에는 원본 방문유형을 그대로 나열하지 않고, 구분(재택/일방시/장주사) 단위로 정리해서 보여줍니다.
+      // - "단독간호"처럼 재택관리의 한 요소일 뿐인 방문유형은 별도 배지로 보여주지 않고 "재택"에 묶습니다.
+      // - "일방시"는, 재택 방문에 자동으로 포함되는 몫과는 별개로 실제로 독립된 일방시성 방문(일방시/일방시(의사단독)/의단+간단)이
+      //   이번달에 따로 있을 때만 배지로 보여줍니다. 재택정기방문/재택포괄만 있고 별도 일방시 방문이 없으면 표시하지 않습니다.
+      var visitCatSet = {};
       thisMonthVisits.forEach(function(v){
-        if(v.visitType && distinctTypes.indexOf(v.visitType) === -1) distinctTypes.push(v.visitType);
+        var primaryCat = VISIT_TYPE_TO_CATEGORY[v.visitType];
+        if(primaryCat){
+          if(!visitCatSet[primaryCat]) visitCatSet[primaryCat] = { pogal:false };
+          if(v.visitType === primaryCat + "포괄") visitCatSet[primaryCat].pogal = true;
+        }
+        if(v.visitType === "의단+간단" && !visitCatSet["재택"]) visitCatSet["재택"] = { pogal:false }; // 단독간호 요소도 포함하므로 재택도 함께 표시
       });
-      visitTypeBadges = distinctTypes.map(function(t){ return renderVisitTypeBadge(t); }).join("");
+      var distinctCats = CATS.filter(function(c){ return visitCatSet[c]; });
+      visitTypeBadges = distinctCats.map(function(c){
+        var label = visitCatSet[c].pogal ? (c + "포괄") : c;
+        return '<span class="badge badge-'+c+'">'+label+'</span>';
+      }).join("");
     }
 
     var body = isYear ? buildYearBody(p, S.year) : buildMonthBody(p, mkey);
@@ -4183,19 +4253,32 @@
         return true;
       });
 
-    rows.sort(function(a,b){ return (a.p.name||"").localeCompare(b.p.name||"", "ko"); });
+    // 상태에 따라 정렬: 진행/미지정 -> 보류 -> 종결 순으로 묶고, 각 묶음 안에서는 가나다순
+    function statusTier(status){
+      if(status === "종결") return 2;
+      if(status === "보류") return 1;
+      return 0;
+    }
+    rows.sort(function(a,b){
+      var ta = statusTier(a.status), tb = statusTier(b.status);
+      if(ta !== tb) return ta - tb;
+      return (a.p.name||"").localeCompare(b.p.name||"", "ko");
+    });
 
     var html = '<div class="toolbar">' +
       '<h2>재택 업무기록 <span style="font-weight:400;color:var(--ink-soft);font-size:12.5px;">(재택 등록환자 '+rows.length+'명)</span></h2>' +
-      '<button class="btn btn-sm" id="swSearchBtn">검색</button>' +
+      '<div style="display:flex;gap:8px;">' +
+        '<input type="text" id="swNameSearchInput" class="tf-input" data-tf-table="socialworker" data-tf-key="name" style="max-width:140px;" placeholder="이름 검색" value="'+escapeHtml(tf.name||"")+'">' +
+        '<button class="btn btn-sm" id="swSearchBtn">검색</button>' +
+      '</div>' +
     '</div>';
 
     html += '<div class="assign-table-wrap"><table class="assign-table sw-table"><thead><tr>' +
-      '<th>연번</th><th>이름</th><th>방문유형</th><th>방문일자</th><th>방문간호사</th><th>필수입력</th><th>MINT<br>업무기록</th><th>요양정보마당<br>업무기록</th><th>통돌</th><th>상태</th><th>메모</th>' +
+      '<th>연번</th><th>이름</th><th>방문유형</th><th>방문일자</th><th>방문간호사</th><th>필수입력</th><th>MINT</th><th>요양마당</th><th>통돌</th><th>상태</th><th>메모</th>' +
     '</tr>' +
     buildFilterHeaderRow("socialworker", [
       { key:"seq", type:"none" },
-      { key:"name", type:"text" },
+      { key:"name", type:"none" },
       { key:"visitType", type:"none" },
       { key:"date", type:"none" },
       { key:"nurse", type:"select", options: [{value:"__none__",label:"미기재"}].concat(S.staff.map(function(n){ return {value:n,label:n}; })) },
@@ -4220,7 +4303,8 @@
         var statusOpts = ['<option value=""'+(!r.status?' selected':'')+'>-</option>'].concat(
           SW_STATUS_OPTIONS.map(function(s){ return '<option value="'+s+'" '+(r.status===s?'selected':'')+'>'+s+'</option>'; })
         ).join("");
-        html += '<tr>' +
+        var rowStyle = r.status === "종결" ? ' style="color:var(--ink-soft);"' : '';
+        html += '<tr'+rowStyle+'>' +
           '<td style="color:var(--ink-soft);font-variant-numeric:tabular-nums;">'+(idx+1)+'</td>' +
           '<td style="font-weight:600;">'+escapeHtml(p.name)+'</td>' +
           '<td>'+(latest ? renderVisitTypeBadge(latest.visitType||"") : '<span style="color:var(--ink-soft);">-</span>')+'</td>' +
