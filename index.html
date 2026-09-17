@@ -129,7 +129,12 @@
     overflow:hidden;
   }
   .dashboard-head{
-    display:flex; align-items:center; gap:16px; padding:12px 14px; cursor:pointer;
+    display:flex; align-items:center; gap:14px; padding:12px 14px; cursor:pointer; flex-wrap:wrap;
+  }
+  .dash-stat-group-left{ display:flex; align-items:center; gap:16px; flex:0 1 auto; min-width:0; flex-wrap:nowrap; }
+  .dash-stat-group-right{
+    display:flex; align-items:center; gap:16px; flex:0 0 auto; min-width:0; flex-wrap:nowrap;
+    margin-left:auto; padding-left:14px; border-left:1px solid var(--line-soft);
   }
   .dash-stat{ display:flex; flex-direction:column; }
   .dash-stat-clickable{ cursor:pointer; border-radius:8px; padding:2px 6px; margin:-2px -6px; }
@@ -189,6 +194,7 @@
   .badge.chip-pending{ opacity:.55; }
   .badge.chip-needinfo{ border:1px dashed var(--warn); opacity:.85; }
   .badge.chip-unvisited{ opacity:.5; filter:grayscale(40%); }
+  .patient-visit-types{ display:flex; gap:4px; flex-wrap:nowrap; overflow:hidden; }
   .patient-badges{ display:flex; gap:5px; flex-wrap:nowrap; align-items:center; flex:none; margin-left:auto; }
   .status-dot{ width:8px; height:8px; border-radius:50%; flex:none; display:inline-block; }
   .patient-nurse{ font-size:12px; color:var(--ink-soft); margin-left:auto; text-align:right; flex:none; }
@@ -224,6 +230,13 @@
   .chk-hira{ accent-color:#bfe1f6; }
   .chk-mintwork{ accent-color:#9B6FB0; }
   .chk-yosangwork{ accent-color:#3FA796; }
+  .chk-tongdol{ accent-color:#6C7BD9; }
+  .tongdol-month{ font-size:10px; color:var(--ink-soft); white-space:nowrap; cursor:pointer; text-decoration:underline dotted; }
+
+  /* 사회복지사 표: 열이 11개라 가급적 가로스크롤 없이 맞추기 위해 폭을 압축 */
+  .sw-table th, .sw-table td{ padding-left:6px; padding-right:6px; }
+  .sw-table .memo-cell{ max-width:80px; min-width:60px; }
+  .sw-table .memo-cell .inline-edit{ max-width:80px; min-width:60px; }
   .item-main{ flex:1; min-width:0; }
   .item-label{ font-size:14px; }
   .req-tag{ font-size:10px; font-weight:700; color:var(--warn); background:var(--warn-soft); border-radius:4px; padding:1px 5px; margin-left:6px; vertical-align:middle; }
@@ -245,6 +258,15 @@
     border-radius:20px; padding:3px 4px 3px 10px; font-size:12px; font-variant-numeric:tabular-nums;
   }
   .chip button{ border:none; background:none; color:var(--teal); cursor:pointer; font-size:13px; line-height:1; padding:2px 6px; }
+
+  .log-date-group{ margin-top:6px; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .log-date-toggle{
+    display:flex; align-items:center; gap:8px; padding:8px 10px; cursor:pointer;
+    background:var(--paper); font-size:12.5px; font-variant-numeric:tabular-nums;
+  }
+  .log-date-toggle .chev{ font-size:11px; color:var(--ink-soft); transition:transform .15s; flex:none; }
+  .log-date-toggle button{ border:none; background:none; color:var(--ink-soft); cursor:pointer; font-size:14px; line-height:1; flex:none; }
+  .log-date-body{ padding:2px 10px 8px 30px; border-top:1px solid var(--line-soft); }
 
   .no-category-note{ padding:12px 14px; font-size:13px; color:var(--ink-soft); }
 
@@ -463,10 +485,16 @@
 
   <div class="dashboard" id="dashboard">
     <div class="dashboard-head" id="dashboardHead">
-      <div class="dash-stat"><span class="num" id="statPatients">0</span><span class="lbl">담당환자</span></div>
-      <div class="dash-stat dash-stat-clickable" data-cat="재택"><span class="num cat-재택-text" id="statHome">0/0</span><span class="lbl">재택 필수완료</span></div>
-      <div class="dash-stat dash-stat-clickable" data-cat="일방시"><span class="num cat-일방시-text" id="statVisit">0/0</span><span class="lbl">일방시 필수완료</span></div>
-      <div class="dash-stat dash-stat-clickable" data-cat="장주사"><span class="num cat-장주사-text" id="statDisability">0/0</span><span class="lbl">장주사 필수완료</span></div>
+      <div class="dash-stat-group-left">
+        <div class="dash-stat"><span class="num" id="statPatients">0</span><span class="lbl">담당환자</span></div>
+        <div class="dash-stat dash-stat-clickable" data-cat="재택"><span class="num cat-재택-text" id="statHome">0/0</span><span class="lbl">재택 필수완료</span></div>
+        <div class="dash-stat dash-stat-clickable" data-cat="일방시"><span class="num cat-일방시-text" id="statVisit">0/0</span><span class="lbl">일방시 필수완료</span></div>
+        <div class="dash-stat dash-stat-clickable" data-cat="장주사"><span class="num cat-장주사-text" id="statDisability">0/0</span><span class="lbl">장주사 필수완료</span></div>
+      </div>
+      <div class="dash-stat-group-right">
+        <div class="dash-stat"><span class="num" id="statUnassigned">0</span><span class="lbl">비담당환자</span></div>
+        <div class="dash-stat"><span class="num cat-일방시-text" id="statUnassignedVisit">0/0</span><span class="lbl">일방시 필수완료</span></div>
+      </div>
       <span class="chev">▾</span>
     </div>
     <div class="dashboard-body" id="dashboardBody"></div>
@@ -537,7 +565,11 @@
         { name:"요양정보마당 단독간호기록지", type:"check", req:{first:true, after:true} }
       ]},
       { group:"추가간호", items:[
-        { name:"방문 날짜", type:"log", req:{first:false, after:false} }
+        { name:"방문 날짜", type:"log", req:{first:false, after:false} },
+        { name:"방문", type:"check", req:{first:false, after:false}, perDate:true },
+        { name:"EMR 단독간호 챠팅", type:"check", req:{first:false, after:false}, perDate:true },
+        { name:"MINT 단독간호 기록지", type:"check", req:{first:false, after:false}, perDate:true },
+        { name:"요양정보마당 단독간호기록지", type:"check", req:{first:false, after:false}, perDate:true }
       ]},
       { group:"MINT 일방시", items:[
         { name:"MINT 일방시 점검서식", type:"check", req:{first:true, after:true}, syncFromVisit:true }
@@ -760,6 +792,7 @@
     mintStatsOpen: false,
     dashboardCategory: null, // 재택/일방시/장주사 상황판 중 어떤 게 펼쳐져 있는지
     checklistViewMode: "nurse", // "nurse" | "socialworker" - 체크리스트 탭 안에서 간호사 카드뷰 / 사회복지사 표뷰 전환
+    openLogDates: {}, // 추가간호처럼 날짜별로 접혀있는 세부 체크리스트의 펼침 상태 (key: "환자ID|항목키|날짜")
     // 탭별·열별 필터 상태 (엑셀 자동필터처럼 각 표마다 독립적으로 유지됨)
     tableFilters: {
       candidates: {},
@@ -2204,8 +2237,11 @@
   // 방문유형별로 해당하는 구분(재택/일방시/장주사)과, 구분별로 처리하는 중분류(그룹)를 매핑합니다.
   // "의단+간단"처럼 한 방문이 여러 구분·그룹을 동시에 처리하는 경우도 있어서, 구분마다 그룹 배열을 따로 둡니다.
   var VISIT_TYPE_TO_GROUPS_BY_CAT = {
-    "재택포괄": { "재택": ["동의서", "재택서식", "MINT 일방시"] },
-    "재택정기방문": { "재택": ["동의서", "재택서식", "MINT 일방시"] },
+    // 재택포괄/재택정기방문은 재택 요건뿐 아니라, 같은 날 일방시 방문도 함께 이루어진 것으로 보고
+    // 일방시 구분의 "방문" 그룹(방문 날짜)까지 자동으로 충족시켜줍니다 (재택방문일=일방시방문일).
+    // 일방시동의서·MINT 등 일방시만의 고유 요건까지 자동 충족되는 건 아닙니다.
+    "재택포괄": { "재택": ["동의서", "재택서식", "MINT 일방시"], "일방시": ["방문"] },
+    "재택정기방문": { "재택": ["동의서", "재택서식", "MINT 일방시"], "일방시": ["방문"] },
     "단독간호": { "재택": ["단독간호"] },
     "추가간호": { "재택": ["추가간호"] },
     "일방시": { "일방시": ["동의서", "방문", "MINT 일방시"] },
@@ -3133,9 +3169,9 @@
   function isMintSyncedFromVisits(p, cat, mkey){
     return findVisitsForGroup(p, cat, "MINT 일방시", mkey).some(function(v){ return !!v.mintVisit; });
   }
-  function isItemSatisfied(p, cat, group, it, mkey){
+  function isItemSatisfied(p, cat, group, it, mkey, keySuffix){
     if(it.syncFromVisit){ return isMintSyncedFromVisits(p, cat, mkey); }
-    var key = cat+"|"+group+"|"+it.name;
+    var key = cat+"|"+group+"|"+it.name+(keySuffix||"");
     if(it.type === "check"){
       if(it.once) return !!findOnceRecord(p.id, key);
       var d = getItemMonthData(p.id, key, mkey);
@@ -3163,14 +3199,14 @@
   }
 
   // 특정 그룹(예: 동의서, 재택서식) 하나에 대해서만 필수항목 충족 여부 계산
-  function computeGroupStatus(p, cat, group, mkey){
+  function computeGroupStatus(p, cat, group, mkey, keySuffix){
     var phase = getPhase(p, cat, mkey);
     if(!phase) return null;
     var required = 0, done = 0;
     group.items.forEach(function(it){
       if(!isItemRequired(it, phase)) return;
       required++;
-      if(isItemSatisfied(p, cat, group.group, it, mkey)) done++;
+      if(isItemSatisfied(p, cat, group.group, it, mkey, keySuffix)) done++;
     });
     return { required:required, done:done, satisfied: required===0 ? true : (done===required) };
   }
@@ -3192,15 +3228,39 @@
   }
 
   // 특정 구분(재택/일방시/장주사)의 상황판 HTML 생성: 그룹별 요약 + 환자별 O/X 표
+  // 이번달에 그 구분(cat)으로 2번 이상 방문한 환자 목록 (참고용 안내에 사용)
+  function getMultiVisitPatients(cat, mkey){
+    return getNurseFilteredPatients()
+      .filter(function(p){ return !!p.nurse && (p.categories||[]).indexOf(cat) !== -1; })
+      .map(function(p){
+        var count = (S.visitsCache[mkey] || []).filter(function(v){
+          return String(v.no) === String(p.no) && getVisitCategories(v.visitType).indexOf(cat) !== -1;
+        }).length;
+        return { p:p, count:count };
+      })
+      .filter(function(r){ return r.count >= 2; });
+  }
+
   function buildCategoryBoard(cat, mkey){
     var groups = S.templates[cat] || [];
     var activePatients = getNurseFilteredPatients().filter(function(p){
-      return (p.categories||[]).indexOf(cat) !== -1
+      return !!p.nurse // 고정환자(담당간호사 있음)만 - 비담당환자는 우측 별도 통계에서 다룸
+        && (p.categories||[]).indexOf(cat) !== -1
         && getPhase(p, cat, mkey) !== null
         && patientCategoryVisitedThisMonth(p, cat, mkey);
     });
 
     var summaryHtml = '<div style="font-size:11px;color:var(--ink-soft);margin-bottom:6px;">이번달 방문목록에 있는 '+escapeHtml(cat)+' 환자 '+activePatients.length+'명 기준</div>';
+
+    var multiVisitPatients = getMultiVisitPatients(cat, mkey);
+    if(multiVisitPatients.length > 0){
+      summaryHtml += '<div style="background:var(--warn-soft);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:var(--warn);">' +
+        multiVisitPatients.map(function(r){
+          return '⚠ '+escapeHtml(r.p.name)+' 님은 이번달 '+escapeHtml(cat)+' 방문이 '+r.count+'회 이상입니다. 2회차 이후 방문에 대한 필수 입력 확인 바랍니다.';
+        }).join('<br>') +
+      '</div>';
+    }
+
     summaryHtml += '<div class="board-summary">';
     groups.forEach(function(g){
       if(groupIsOptionalLog(g)){
@@ -3275,43 +3335,56 @@
 
   /* ================= 렌더 : 대시보드 ================= */
   function buildCompletionStats(mkey){
-    var overall = {}; CATS.forEach(function(c){ overall[c] = {done:0, total:0}; });
-    var byNurse = {}; // nurse -> {cat:{done,total}}
+    var overall = {}; CATS.forEach(function(c){ overall[c] = {done:0, total:0}; });      // 고정환자(담당간호사 있음)만 집계
+    var unassigned = {}; CATS.forEach(function(c){ unassigned[c] = {done:0, total:0}; }); // 비담당환자(담당간호사 없음)만 집계
+    var byNurse = {}; // nurse -> {cat:{done,total}} (고정환자 기준, "미배정"은 여기서 제외)
     var missingList = []; // {p, cat, missing:[{group,name}]}
 
     S.patients.forEach(function(p){
-      var nurse = p.nurse || "미배정";
-      if(!byNurse[nurse]){ byNurse[nurse]={}; CATS.forEach(function(c){ byNurse[nurse][c]={done:0,total:0}; }); }
+      var hasNurse = !!p.nurse;
+      var target = hasNurse ? overall : unassigned;
+      if(hasNurse && !byNurse[p.nurse]){ byNurse[p.nurse]={}; CATS.forEach(function(c){ byNurse[p.nurse][c]={done:0,total:0}; }); }
       (p.categories||[]).forEach(function(cat){
         if(!patientCategoryVisitedThisMonth(p, cat, mkey)) return; // 그 구분으로 이번달 방문이 없으면 집계 제외
         var status = computeCategoryStatus(p, cat, mkey);
         if(!status) return; // 시작 전
-        overall[cat].total++;
-        byNurse[nurse][cat].total++;
+        target[cat].total++;
+        if(hasNurse) byNurse[p.nurse][cat].total++;
         if(status.satisfied){
-          overall[cat].done++;
-          byNurse[nurse][cat].done++;
+          target[cat].done++;
+          if(hasNurse) byNurse[p.nurse][cat].done++;
         } else {
           missingList.push({ p:p, cat:cat, missing:status.missing });
         }
       });
     });
-    return { overall:overall, byNurse:byNurse, missingList:missingList };
+    return { overall:overall, unassigned:unassigned, byNurse:byNurse, missingList:missingList };
   }
 
   function renderDashboard(){
     var mkey = monthKey(S.year, S.month);
     var stats = buildCompletionStats(mkey);
 
-    var visibleCount = getNurseFilteredPatients().filter(isPatientVisibleForCurrentView).length;
+    // "담당환자"는 이제 고정환자(담당간호사가 지정된 환자)만 셉니다.
+    var visibleCount = (S.who === "전체")
+      ? S.patients.filter(function(p){ return !!p.nurse && isPatientVisibleForCurrentView(p); }).length
+      : getNurseFilteredPatients().filter(isPatientVisibleForCurrentView).length;
     var scoped = (S.who === "전체") ? stats.overall : (stats.byNurse[S.who] || {});
 
     document.getElementById("statPatients").textContent = visibleCount;
     CATS.forEach(function(c){
       var v = scoped[c] || {done:0, total:0};
       var elId = c === "재택" ? "statHome" : (c === "일방시" ? "statVisit" : "statDisability");
-      document.getElementById(elId).textContent = v.done + "/" + v.total;
+      var hasMulti = getMultiVisitPatients(c, mkey).length > 0;
+      document.getElementById(elId).textContent = v.done + "/" + v.total + (hasMulti ? " ★" : "");
+      document.getElementById(elId).title = hasMulti ? "이번달 "+c+" 방문이 2회 이상인 환자가 있습니다. 눌러서 상황판에서 확인하세요." : "";
     });
+
+    // 우측: 비담당환자(담당간호사 미지정) 현황. 특정 간호사에게 속하지 않으므로 전체 기준으로 항상 표시합니다.
+    var unassignedCount = S.patients.filter(function(p){ return !p.nurse && isPatientVisibleForCurrentView(p); }).length;
+    document.getElementById("statUnassigned").textContent = unassignedCount;
+    var uv = stats.unassigned["일방시"] || { done:0, total:0 };
+    document.getElementById("statUnassignedVisit").textContent = uv.done + "/" + uv.total;
 
     document.querySelectorAll(".dash-stat-clickable").forEach(function(el){
       el.classList.toggle("selected", el.getAttribute("data-cat") === S.dashboardCategory);
@@ -3410,27 +3483,37 @@
     var defaultLogDate = todayInThisMonth ? todayStr() : monthMin;
 
     var body = "";
-    visitedCats.forEach(function(cat){
+
+    // 카테고리 블록 하나(제목+그룹들)를 그려서 body에 이어붙입니다.
+    // keySuffix/suffixGroups: 장주사처럼 한 달에 여러 번 방문할 수 있는 구분에서, 특정 그룹의 항목을
+    // 방문 건별로 따로 추적하고 싶을 때 그 그룹의 저장 키 뒤에 접미사(예: "|"+방문ID)를 붙여줍니다.
+    function renderOneCategoryBlock(cat, titleDateSuffix, keySuffix, suffixGroups){
       var groups = S.templates[cat] || [];
       var phase = getPhase(p, cat, mkey);
       var phaseLabel = phase === "first" ? "이번달 첫 방문달" : (phase === "after" ? "첫 방문달 이후" : (getCategoryStartMonth(p,cat) ? "시작 전" : "시작월 미정"));
+      keySuffix = keySuffix || "";
+      suffixGroups = suffixGroups || [];
       body += '<div class="category-block cat-'+cat+'">' +
         '<div class="category-title"><span class="category-bar"></span><span class="'+'cat-'+cat+'-text'+'">'+cat+'</span>' +
-        '<span style="font-weight:400;color:var(--ink-soft);font-size:11px;">'+phaseLabel+'</span></div>';
+        '<span style="font-weight:400;color:var(--ink-soft);font-size:11px;">'+phaseLabel+'</span>' +
+        (titleDateSuffix || '') + '</div>';
       groups.forEach(function(g){
         var isSyncGroup = g.items.length > 0 && g.items.every(function(it){ return it.syncFromVisit; });
         if(isSyncGroup) return; // 구분별로 나누지 않고 환자 전체 통합 섹션으로 아래에서 한 번만 표시
+        var groupKeySuffix = suffixGroups.indexOf(g.group) !== -1 ? keySuffix : "";
         var titleCls = g.group === "단독간호" ? "tag-solo" : (g.group === "추가간호" ? "tag-extra" : "");
         var proxyNote = buildProxyNoteForGroup(p, cat, g.group, mkey);
-        var gs = computeGroupStatus(p, cat, g, mkey);
+        var gs = computeGroupStatus(p, cat, g, mkey, groupKeySuffix);
         var groupDot = "";
         if(gs && gs.required > 0){
           var gColor = gs.done === gs.required ? "#34A853" : (gs.done === 0 ? "#E24B4A" : "#F0A020");
           groupDot = '<span class="status-dot" style="background:'+gColor+';margin-right:6px;vertical-align:middle;" title="필수 '+gs.done+'/'+gs.required+'"></span>';
         }
         body += '<div class="group-block"><div class="group-title '+titleCls+'">'+groupDot+escapeHtml(g.group)+proxyNote+'</div>';
+        var perDateItems = (g.items || []).filter(function(it2){ return it2.perDate; });
         (g.items || []).forEach(function(it){
-          var key = cat+"|"+g.group+"|"+it.name;
+          if(it.perDate) return; // 날짜별 하위 체크리스트는 아래 로그형 항목 안에서 별도로 그림
+          var key = cat+"|"+g.group+"|"+it.name+groupKeySuffix;
           var required = isItemRequired(it, phase);
           if(it.type === "check"){
             if(it.syncFromVisit){
@@ -3486,22 +3569,83 @@
                 '<div style="display:flex;align-items:center;gap:6px;margin-top:5px;">' +
                   '<input type="date" class="log-date-input" min="'+monthMin+'" max="'+monthMax+'" value="'+defaultLogDate+'" data-pid="'+p.id+'" data-key="'+encodeURIComponent(key)+'">' +
                   '<button class="log-add" data-act="addlog" data-pid="'+p.id+'" data-key="'+encodeURIComponent(key)+'">+ 날짜 추가</button>' +
-                '</div>' +
-                '<div class="log-chips">' +
+                '</div>';
+            if(perDateItems.length === 0){
+              // 일반적인 경우: 날짜만 칩으로 나열
+              body += '<div class="log-chips">' +
                   dates.map(function(ds, idx){
                     var proxyNurse = findProxyNurseForDate(p, cat, g.group, ds, mkey);
                     var proxyLabel = proxyNurse ? ' <span style="color:var(--warn);font-weight:700;">('+escapeHtml(proxyNurse)+')</span>' : '';
                     return '<span class="chip">'+fmtMD(ds)+proxyLabel+
                       '<button data-act="rmlog" data-pid="'+p.id+'" data-key="'+encodeURIComponent(key)+'" data-idx="'+idx+'">×</button></span>';
                   }).join("") +
-                '</div>' +
-              '</div>' +
-            '</div>';
+                '</div>';
+            } else {
+              // 추가간호처럼 날짜별 세부 체크리스트가 딸린 경우: 날짜를 접이식 헤더로 표시
+              dates.forEach(function(ds, idx){
+                var proxyNurse = findProxyNurseForDate(p, cat, g.group, ds, mkey);
+                var proxyLabel = proxyNurse ? ' <span style="color:var(--warn);font-weight:700;">('+escapeHtml(proxyNurse)+')</span>' : '';
+                var dateDone = 0;
+                perDateItems.forEach(function(pdIt){
+                  var pdKey = cat+"|"+g.group+"|"+pdIt.name+"|"+ds;
+                  var pdData = getItemMonthData(p.id, pdKey, mkey);
+                  if(pdData && pdData.checked) dateDone++;
+                });
+                var dateColor = dateDone === perDateItems.length ? "#34A853" : (dateDone === 0 ? "#E24B4A" : "#F0A020");
+                var openKey = p.id + "|" + key + "|" + ds;
+                var isDateOpen = !!S.openLogDates[openKey];
+                body += '<div class="log-date-group">' +
+                  '<div class="log-date-toggle" data-act="toggleLogDate" data-openkey="'+encodeURIComponent(openKey)+'">' +
+                    '<span class="chev" style="'+(isDateOpen?'transform:rotate(90deg);':'')+'">▸</span>' +
+                    '<span class="status-dot" style="background:'+dateColor+';" title="'+dateDone+'/'+perDateItems.length+' 완료"></span>' +
+                    '<span>'+escapeHtml(fmtMD(ds))+proxyLabel+'</span>' +
+                    '<span style="font-size:11px;color:var(--ink-soft);margin-left:auto;">'+dateDone+'/'+perDateItems.length+'</span>' +
+                    '<button data-act="rmlog" data-pid="'+p.id+'" data-key="'+encodeURIComponent(key)+'" data-idx="'+idx+'" title="이 날짜 삭제">×</button>' +
+                  '</div>';
+                if(isDateOpen){
+                  body += '<div class="log-date-body">';
+                  perDateItems.forEach(function(pdIt){
+                    var pdKey = cat+"|"+g.group+"|"+pdIt.name+"|"+ds;
+                    var pdData = getItemMonthData(p.id, pdKey, mkey);
+                    var pdChecked = !!(pdData && pdData.checked);
+                    body += '<div class="item-row">' +
+                      '<input type="checkbox" class="chk" data-act="check" data-pid="'+p.id+'" data-key="'+encodeURIComponent(pdKey)+'" data-mkey="'+mkey+'" '+(pdChecked?'checked':'')+'>' +
+                      '<div class="item-main"><div class="item-label">'+escapeHtml(pdIt.name)+
+                        '<span class="status-dot" style="background:'+(pdChecked?"#34A853":"#E24B4A")+';margin-left:6px;vertical-align:middle;" title="'+(pdChecked?"완료":"미완료")+'"></span>' +
+                      '</div></div>' +
+                    '</div>';
+                  });
+                  body += '</div>';
+                }
+                body += '</div>';
+              });
+            }
+            body += '</div></div>';
           }
         });
         body += '</div>';
       });
       body += '</div>';
+    }
+
+    // 장주사는 한 달에 여러 번 방문할 수 있어서, 방문 건마다 "장주서식" 그룹을 따로 반복해서 보여줍니다.
+    // (동의서는 1회성/월단위 공통 항목이라 방문 건과 무관하게 한 번만 표시됩니다.)
+    visitedCats.forEach(function(cat){
+      if(cat === "장주사"){
+        var jangjusaVisits = (S.visitsCache[mkey] || []).filter(function(v){
+          return String(v.no) === String(p.no) && getVisitCategories(v.visitType).indexOf("장주사") !== -1;
+        }).sort(function(a,b){ return (a.date||"").localeCompare(b.date||""); });
+        if(jangjusaVisits.length === 0){
+          renderOneCategoryBlock(cat, "", "", []);
+        } else {
+          jangjusaVisits.forEach(function(v){
+            var dateLabel = ' <span style="font-weight:400;color:var(--ink-soft);font-size:11px;">('+escapeHtml(fmtMD(v.date))+' '+escapeHtml(v.visitType||"")+')</span>';
+            renderOneCategoryBlock(cat, dateLabel, "|"+v.id, ["장주서식"]);
+          });
+        }
+      } else {
+        renderOneCategoryBlock(cat, "", "", []);
+      }
     });
 
     // MINT 일방시: 구분(재택/일방시/장주사)과 무관하게, 이번달 이 환자의 관련 방문 전체를 모아 한 번만 표시합니다.
@@ -3591,6 +3735,7 @@
   function renderOnePatientCard(p, mkey, isYear){
     var isOpen = !!S.openPatients[p.id];
     var badges;
+    var visitTypeBadges = "";
     if(isYear){
       badges = p.categories.map(function(c){ return '<span class="badge badge-'+c+'">'+c+'</span>'; }).join("");
     } else {
@@ -3599,6 +3744,13 @@
         return '<span class="status-dot" style="background:'+chipDotColor(c.state)+';" title="'+escapeHtml(c.label)+'"></span>';
       }).join("");
       if(p.isVirtual){ badges += '<span class="status-dot" style="background:var(--line);" title="환자배정 미등록"></span>'; }
+
+      var thisMonthVisits = (S.visitsCache[mkey] || []).filter(function(v){ return String(v.no) === String(p.no); });
+      var distinctTypes = [];
+      thisMonthVisits.forEach(function(v){
+        if(v.visitType && distinctTypes.indexOf(v.visitType) === -1) distinctTypes.push(v.visitType);
+      });
+      visitTypeBadges = distinctTypes.map(function(t){ return renderVisitTypeBadge(t); }).join("");
     }
 
     var body = isYear ? buildYearBody(p, S.year) : buildMonthBody(p, mkey);
@@ -3617,6 +3769,7 @@
       '<div class="patient-head" data-act="toggle" data-pid="'+p.id+'">' +
         '<span class="patient-id">#'+escapeHtml(p.no||"")+'</span>' +
         '<span class="patient-name">'+escapeHtml(p.name)+'</span>' +
+        (visitTypeBadges ? '<span class="patient-visit-types">'+visitTypeBadges+'</span>' : '') +
         '<span class="patient-badges">'+badges+'</span>' +
         '<span class="chev">▸</span>' +
       '</div>' +
@@ -3835,6 +3988,14 @@
         renderAll();
       });
     });
+    wrap.querySelectorAll('[data-act="toggleLogDate"]').forEach(function(el){
+      el.addEventListener("click", function(ev){
+        ev.stopPropagation();
+        var openKey = decodeURIComponent(el.getAttribute("data-openkey"));
+        S.openLogDates[openKey] = !S.openLogDates[openKey];
+        renderAll();
+      });
+    });
     wrap.querySelectorAll('[data-act="rmlog"]').forEach(function(el){
       el.addEventListener("click", async function(ev){
         ev.stopPropagation();
@@ -3916,6 +4077,9 @@
   // 사회복지사(신현경)의 재택 업무기록은 특정 방문 하나가 아니라 "이 환자, 이번달" 단위로 관리합니다.
   var SW_MINT_KEY = "재택|사회복지사업무|MINT 업무기록";
   var SW_YOSANG_KEY = "재택|사회복지사업무|요양정보마당 업무기록";
+  var SW_TONGDOL_KEY = "재택|사회복지사업무|통돌";
+  var SW_STATUS_KEY = "재택|사회복지사업무|상태";
+  var SW_STATUS_OPTIONS = ["진행", "보류", "종결"];
   var SW_MEMO_KEY = "재택|사회복지사업무|메모";
   function getSwFlag(p, key, mkey){
     var d = getItemMonthData(p.id, key, mkey);
@@ -3928,15 +4092,38 @@
     else { delete st.items[key][mkey]; }
     await saveAllPatientStates();
   }
-  function getSwMemo(p, mkey){
-    var d = getItemMonthData(p.id, SW_MEMO_KEY, mkey);
+  function getSwText(p, key, mkey){
+    var d = getItemMonthData(p.id, key, mkey);
     return (d && d.note) ? d.note : "";
   }
-  async function setSwMemo(p, mkey, text){
+  async function setSwText(p, key, mkey, text){
     var st = ensurePatientState(p.id);
-    if(!st.items[SW_MEMO_KEY]) st.items[SW_MEMO_KEY] = {};
-    if(text){ st.items[SW_MEMO_KEY][mkey] = { note:text }; }
-    else { delete st.items[SW_MEMO_KEY][mkey]; }
+    if(!st.items[key]) st.items[key] = {};
+    if(text){ st.items[key][mkey] = { note:text }; }
+    else { delete st.items[key][mkey]; }
+    await saveAllPatientStates();
+  }
+  function getSwMemo(p, mkey){ return getSwText(p, SW_MEMO_KEY, mkey); }
+  async function setSwMemo(p, mkey, text){ await setSwText(p, SW_MEMO_KEY, mkey, text); }
+
+  // 통돌: 체크 여부와, "몇월 의뢰"인지(의뢰월)를 따로 관리합니다. 처음 체크할 때는 지금 보고 있는 달로
+  // 자동 채워지고, 이후 그 표시를 더블클릭하면 다른 달로 직접 바꿀 수 있습니다.
+  function getTongdol(p, mkey){
+    var d = getItemMonthData(p.id, SW_TONGDOL_KEY, mkey);
+    return { checked: !!(d && d.checked), referralMonth: (d && d.referralMonth) ? d.referralMonth : mkey };
+  }
+  async function setTongdolChecked(p, mkey, checked){
+    var st = ensurePatientState(p.id);
+    if(!st.items[SW_TONGDOL_KEY]) st.items[SW_TONGDOL_KEY] = {};
+    if(checked){ st.items[SW_TONGDOL_KEY][mkey] = { checked:true, referralMonth: mkey }; }
+    else { delete st.items[SW_TONGDOL_KEY][mkey]; }
+    await saveAllPatientStates();
+  }
+  async function setTongdolMonth(p, mkey, referralMonth){
+    var st = ensurePatientState(p.id);
+    if(!st.items[SW_TONGDOL_KEY]) st.items[SW_TONGDOL_KEY] = {};
+    if(!st.items[SW_TONGDOL_KEY][mkey]) st.items[SW_TONGDOL_KEY][mkey] = { checked:true };
+    st.items[SW_TONGDOL_KEY][mkey].referralMonth = referralMonth;
     await saveAllPatientStates();
   }
 
@@ -3962,6 +4149,8 @@
           chip: getCategoryChipState(p, "재택", mkey),
           mint: getSwFlag(p, SW_MINT_KEY, mkey),
           yosang: getSwFlag(p, SW_YOSANG_KEY, mkey),
+          tongdol: getTongdol(p, mkey),
+          status: getSwText(p, SW_STATUS_KEY, mkey),
           memo: getSwMemo(p, mkey)
         };
       })
@@ -3984,6 +4173,13 @@
           var yVal = tf.yosangWorkRecord === "yes";
           if(r.yosang !== yVal) return false;
         }
+        if(tf.tongdol){
+          var tVal = tf.tongdol === "yes";
+          if(r.tongdol.checked !== tVal) return false;
+        }
+        if(tf.status){
+          if((r.status||"") !== tf.status) return false;
+        }
         return true;
       });
 
@@ -3994,8 +4190,8 @@
       '<button class="btn btn-sm" id="swSearchBtn">검색</button>' +
     '</div>';
 
-    html += '<div class="assign-table-wrap"><table class="assign-table"><thead><tr>' +
-      '<th>연번</th><th>이름</th><th>방문유형</th><th>방문일자</th><th>방문간호사</th><th>필수입력</th><th>MINT<br>업무기록</th><th>요양정보마당<br>업무기록</th><th>메모</th>' +
+    html += '<div class="assign-table-wrap"><table class="assign-table sw-table"><thead><tr>' +
+      '<th>연번</th><th>이름</th><th>방문유형</th><th>방문일자</th><th>방문간호사</th><th>필수입력</th><th>MINT<br>업무기록</th><th>요양정보마당<br>업무기록</th><th>통돌</th><th>상태</th><th>메모</th>' +
     '</tr>' +
     buildFilterHeaderRow("socialworker", [
       { key:"seq", type:"none" },
@@ -4009,15 +4205,21 @@
       ] },
       { key:"mintWorkRecord", type:"select", options:[{value:"yes",label:"O"},{value:"no",label:"-"}] },
       { key:"yosangWorkRecord", type:"select", options:[{value:"yes",label:"O"},{value:"no",label:"-"}] },
+      { key:"tongdol", type:"select", options:[{value:"yes",label:"O"},{value:"no",label:"-"}] },
+      { key:"status", type:"select", options: SW_STATUS_OPTIONS.map(function(s){ return {value:s,label:s}; }) },
       { key:"memo", type:"none" }
     ]) +
     '</thead><tbody>';
 
     if(rows.length === 0){
-      html += '<tr><td colspan="9" style="text-align:center;color:var(--ink-soft);padding:24px;">재택으로 등록된 환자가 없습니다.</td></tr>';
+      html += '<tr><td colspan="11" style="text-align:center;color:var(--ink-soft);padding:24px;">재택으로 등록된 환자가 없습니다.</td></tr>';
     } else {
       rows.forEach(function(r, idx){
         var p = r.p, latest = r.latest;
+        var tongdolMonthLabel = r.tongdol.checked ? (parseInt(r.tongdol.referralMonth.split("-")[1],10) + "월 의뢰") : "";
+        var statusOpts = ['<option value=""'+(!r.status?' selected':'')+'>-</option>'].concat(
+          SW_STATUS_OPTIONS.map(function(s){ return '<option value="'+s+'" '+(r.status===s?'selected':'')+'>'+s+'</option>'; })
+        ).join("");
         html += '<tr>' +
           '<td style="color:var(--ink-soft);font-variant-numeric:tabular-nums;">'+(idx+1)+'</td>' +
           '<td style="font-weight:600;">'+escapeHtml(p.name)+'</td>' +
@@ -4027,6 +4229,10 @@
           '<td style="text-align:center;"><span class="status-dot" style="background:'+chipDotColor(r.chip.state)+';" title="'+escapeHtml(r.chip.label)+'"></span></td>' +
           '<td>'+(r.mint ? '<input type="checkbox" class="chk chk-mintwork" data-act="togglemintwork" data-pid="'+p.id+'" checked>' : '<input type="checkbox" class="chk chk-mintwork" data-act="togglemintwork" data-pid="'+p.id+'">')+'</td>' +
           '<td>'+(r.yosang ? '<input type="checkbox" class="chk chk-yosangwork" data-act="toggleyosangwork" data-pid="'+p.id+'" checked>' : '<input type="checkbox" class="chk chk-yosangwork" data-act="toggleyosangwork" data-pid="'+p.id+'">')+'</td>' +
+          '<td style="text-align:center;">'+(r.tongdol.checked ? '<input type="checkbox" class="chk chk-tongdol" data-act="toggletongdol" data-pid="'+p.id+'" checked>' : '<input type="checkbox" class="chk chk-tongdol" data-act="toggletongdol" data-pid="'+p.id+'">')+
+            (tongdolMonthLabel ? '<div class="tongdol-month" data-act="edittongdolmonth" data-pid="'+p.id+'" title="더블클릭하면 의뢰월을 바꿀 수 있습니다">'+escapeHtml(tongdolMonthLabel)+'</div>' : '') +
+          '</td>' +
+          '<td><select class="inline-edit" data-act="editswstatus" data-pid="'+p.id+'">'+statusOpts+'</select></td>' +
           '<td class="memo-cell"><textarea class="inline-edit" rows="1" data-act="editswmemo" data-pid="'+p.id+'">'+escapeHtml(r.memo||"")+'</textarea></td>' +
         '</tr>';
       });
@@ -4053,6 +4259,36 @@
         var p = S.patients.find(function(x){ return x.id === e.target.getAttribute("data-pid"); });
         if(!p) return;
         await setSwFlag(p, SW_YOSANG_KEY, mkey, e.target.checked);
+      });
+    });
+    wrap.querySelectorAll('[data-act="toggletongdol"]').forEach(function(chk){
+      chk.addEventListener("click", function(ev){ ev.stopPropagation(); });
+      chk.addEventListener("change", async function(e){
+        var p = S.patients.find(function(x){ return x.id === e.target.getAttribute("data-pid"); });
+        if(!p) return;
+        await setTongdolChecked(p, mkey, e.target.checked);
+        renderSocialWorkerView(mkey); // 체크시 "N월 의뢰" 표시를 바로 반영
+      });
+    });
+    wrap.querySelectorAll('[data-act="edittongdolmonth"]').forEach(function(el){
+      el.addEventListener("click", function(ev){ ev.stopPropagation(); });
+      el.addEventListener("dblclick", async function(ev){
+        ev.stopPropagation();
+        var p = S.patients.find(function(x){ return x.id === el.getAttribute("data-pid"); });
+        if(!p) return;
+        var current = getTongdol(p, mkey).referralMonth;
+        var chosen = await showMonthPrompt("통돌 의뢰월을 선택해주세요.", current);
+        if(!chosen) return;
+        await setTongdolMonth(p, mkey, chosen);
+        renderSocialWorkerView(mkey);
+      });
+    });
+    wrap.querySelectorAll('[data-act="editswstatus"]').forEach(function(inp){
+      inp.addEventListener("click", function(ev){ ev.stopPropagation(); });
+      inp.addEventListener("change", async function(e){
+        var p = S.patients.find(function(x){ return x.id === e.target.getAttribute("data-pid"); });
+        if(!p) return;
+        await setSwText(p, SW_STATUS_KEY, mkey, e.target.value);
       });
     });
     wrap.querySelectorAll('[data-act="editswmemo"]').forEach(function(inp){
@@ -4124,6 +4360,28 @@
   }
   // 다른 모달(환자 등록 등) 위에 겹쳐서 띄우는 보조 입력창. 기존 모달 내용을 지우지 않음.
   // 드롭다운 선택형 중첩 프롬프트. options: [{value,label}], 반환값은 선택값 또는 취소시 null.
+  function showMonthPrompt(label, defaultValue){
+    return new Promise(function(resolve){
+      var div = document.createElement("div");
+      div.className = "overlay show";
+      div.style.zIndex = 90;
+      div.innerHTML = '<div class="modal" style="max-width:320px;">' +
+          '<h3>'+escapeHtml(label)+'</h3>' +
+          '<div class="field"><input type="month" id="nestedMonthInput" value="'+escapeHtml(defaultValue||"")+'"></div>' +
+          '<div class="modal-actions">' +
+            '<button class="btn" id="nestedMonthCancel">취소</button>' +
+            '<button class="btn btn-teal" id="nestedMonthOk">확인</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(div);
+      div.querySelector("#nestedMonthCancel").onclick = function(){ div.remove(); resolve(null); };
+      div.querySelector("#nestedMonthOk").onclick = function(){
+        var v = div.querySelector("#nestedMonthInput").value;
+        div.remove();
+        resolve(v);
+      };
+    });
+  }
   function showSelectPrompt(label, options, defaultValue){
     return new Promise(function(resolve){
       var div = document.createElement("div");
@@ -4199,7 +4457,8 @@
     var prefillNo = (!editing && prefill && prefill.no) ? prefill.no : "";
     var prefillName = (!editing && prefill && prefill.name) ? prefill.name : "";
 
-    var staffOptions = S.staff.map(function(n){
+    var isUnassigned = editing ? !editing.nurse : true;
+    var staffOptions = '<option value=""'+(isUnassigned?' selected':'')+'>미배정</option>' + S.staff.map(function(n){
       return '<option value="'+escapeHtml(n)+'" '+((editing&&editing.nurse===n)?'selected':'')+'>'+escapeHtml(n)+'</option>';
     }).join("");
 
