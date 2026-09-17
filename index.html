@@ -222,6 +222,8 @@
     width:19px; height:19px; margin-top:1px; flex:none; accent-color:var(--teal); cursor:pointer;
   }
   .chk-hira{ accent-color:#bfe1f6; }
+  .chk-mintwork{ accent-color:#9B6FB0; }
+  .chk-yosangwork{ accent-color:#3FA796; }
   .item-main{ flex:1; min-width:0; }
   .item-label{ font-size:14px; }
   .req-tag{ font-size:10px; font-weight:700; color:var(--warn); background:var(--warn-soft); border-radius:4px; padding:1px 5px; margin-left:6px; vertical-align:middle; }
@@ -450,6 +452,7 @@
   <div id="checklistView">
 
   <div class="checklist-nurse-bar" id="checklistNurseBar"></div>
+  <div class="checklist-nurse-bar" id="checklistSocialWorkerBar"></div>
 
   <div class="monthnav">
     <button id="prevUnit" aria-label="이전">‹</button>
@@ -469,12 +472,20 @@
     <div class="dashboard-body" id="dashboardBody"></div>
   </div>
 
-  <div class="toolbar">
+  <div class="dashboard" id="socialWorkerStat" style="display:none;">
+    <div class="dashboard-head" style="cursor:default;">
+      <div class="dash-stat"><span class="num cat-재택-text" id="swStatHome">0/0</span><span class="lbl">재택 필수완료</span></div>
+    </div>
+  </div>
+
+  <div class="toolbar" id="checklistToolbar">
     <h2>환자 목록</h2>
     <button class="btn btn-teal" id="addPatientBtn">+ 새 환자 등록</button>
   </div>
 
   <div id="patientList"></div>
+
+  <div id="socialWorkerTableWrap" style="display:none;"></div>
 
   </div>
 
@@ -748,12 +759,14 @@
     visitStatsOpen: false,
     mintStatsOpen: false,
     dashboardCategory: null, // 재택/일방시/장주사 상황판 중 어떤 게 펼쳐져 있는지
+    checklistViewMode: "nurse", // "nurse" | "socialworker" - 체크리스트 탭 안에서 간호사 카드뷰 / 사회복지사 표뷰 전환
     // 탭별·열별 필터 상태 (엑셀 자동필터처럼 각 표마다 독립적으로 유지됨)
     tableFilters: {
       candidates: {},
       assignment: {},
       visits: {},
-      bloodtest: {}
+      bloodtest: {},
+      socialworker: {}
     }
   };
 
@@ -1543,6 +1556,7 @@
     el.querySelectorAll('[data-who]').forEach(function(btn){
       btn.addEventListener("click", async function(){
         S.who = btn.getAttribute("data-who");
+        S.checklistViewMode = "nurse";
         await storageSet(K_LAST_NAME, S.who, false);
         showToast(S.who === "전체" ? "전체 환자를 봅니다." : (S.who + " 님의 담당환자만 봅니다."));
         renderAll();
@@ -1557,12 +1571,31 @@
           await storageSet(K_STAFF, S.staff, true);
         }
         S.who = name || S.who;
+        S.checklistViewMode = "nurse";
         await storageSet(K_LAST_NAME, S.who, false);
       }
       renderAll();
     });
 
     updateTabVisibility();
+    renderSocialWorkerBar();
+  }
+
+  // "사회복지사 보기" 바: 담당간호사 개념이 없는 사회복지사는 재택등록 환자 전체를 표 형태로 봅니다.
+  function renderSocialWorkerBar(){
+    var el = document.getElementById("checklistSocialWorkerBar");
+    if(!el) return;
+    var html = '<span class="nurse-bar-label">사회복지사 보기:</span>';
+    (S.mintCheckers||[]).forEach(function(name){
+      html += '<button class="cand-filter-btn'+(S.checklistViewMode==="socialworker"?" active":"")+'" data-sw="'+escapeHtml(name)+'">'+escapeHtml(name)+'</button>';
+    });
+    el.innerHTML = html;
+    el.querySelectorAll('[data-sw]').forEach(function(btn){
+      btn.addEventListener("click", function(){
+        S.checklistViewMode = "socialworker";
+        renderAll();
+      });
+    });
   }
 
   document.getElementById("adminBtn").addEventListener("click", function(){
@@ -3332,27 +3365,32 @@
   }
 
   // 환자 카드 헤더에 표시할 구분별 필수항목 상태칩 데이터
+  // 환자의 특정 구분(cat)에 대한 상태(완료/일부완료/미완료/미방문/설정필요)를 판정. 간호사 카드뷰의 점과
+  // 사회복지사 표의 "필수입력" 점이 정확히 같은 기준을 쓰도록 이 함수 하나로 통일합니다.
+  function getCategoryChipState(p, cat, mkey){
+    if(!patientCategoryVisitedThisMonth(p, cat, mkey)){
+      return { cat:cat, state:"unvisited", label: cat+" 미방문" };
+    }
+    var status = computeCategoryStatus(p, cat, mkey);
+    if(!status){
+      var start = getCategoryStartMonth(p, cat);
+      var label = start ? (cat+" 시작전") : (cat+" 시작월 미정");
+      return { cat:cat, state: start ? "pending" : "needinfo", label:label };
+    }
+    if(status.required === 0){
+      return { cat:cat, state:"none", label:cat };
+    }
+    var catState = status.done === status.required ? "done" : (status.done === 0 ? "missing" : "partial");
+    return {
+      cat:cat,
+      state: catState,
+      label: cat + " 필수 " + status.done + "/" + status.required
+    };
+  }
   function patientCategoryChips(p){
     var mkey = monthKey(S.year, S.month);
     return (p.categories||[]).map(function(cat){
-      if(!patientCategoryVisitedThisMonth(p, cat, mkey)){
-        return { cat:cat, state:"unvisited", label: cat+" 미방문" };
-      }
-      var status = computeCategoryStatus(p, cat, mkey);
-      if(!status){
-        var start = getCategoryStartMonth(p, cat);
-        var label = start ? (cat+" 시작전") : (cat+" 시작월 미정");
-        return { cat:cat, state: start ? "pending" : "needinfo", label:label };
-      }
-      if(status.required === 0){
-        return { cat:cat, state:"none", label:cat };
-      }
-      var catState = status.done === status.required ? "done" : (status.done === 0 ? "missing" : "partial");
-      return {
-        cat:cat,
-        state: catState,
-        label: cat + " 필수 " + status.done + "/" + status.required
-      };
+      return getCategoryChipState(p, cat, mkey);
     });
   }
 
@@ -3875,13 +3913,183 @@
   }
 
   // 이번달 방문목록 캐시가 없으면 먼저 불러온 뒤 대시보드·환자목록을 그린다.
+  // 사회복지사(신현경)의 재택 업무기록은 특정 방문 하나가 아니라 "이 환자, 이번달" 단위로 관리합니다.
+  var SW_MINT_KEY = "재택|사회복지사업무|MINT 업무기록";
+  var SW_YOSANG_KEY = "재택|사회복지사업무|요양정보마당 업무기록";
+  var SW_MEMO_KEY = "재택|사회복지사업무|메모";
+  function getSwFlag(p, key, mkey){
+    var d = getItemMonthData(p.id, key, mkey);
+    return !!(d && d.checked);
+  }
+  async function setSwFlag(p, key, mkey, checked){
+    var st = ensurePatientState(p.id);
+    if(!st.items[key]) st.items[key] = {};
+    if(checked){ st.items[key][mkey] = { checked:true }; }
+    else { delete st.items[key][mkey]; }
+    await saveAllPatientStates();
+  }
+  function getSwMemo(p, mkey){
+    var d = getItemMonthData(p.id, SW_MEMO_KEY, mkey);
+    return (d && d.note) ? d.note : "";
+  }
+  async function setSwMemo(p, mkey, text){
+    var st = ensurePatientState(p.id);
+    if(!st.items[SW_MEMO_KEY]) st.items[SW_MEMO_KEY] = {};
+    if(text){ st.items[SW_MEMO_KEY][mkey] = { note:text }; }
+    else { delete st.items[SW_MEMO_KEY][mkey]; }
+    await saveAllPatientStates();
+  }
+
+  // 사회복지사(신현경)용 화면: 대상자목록에서 "재택"으로 구분된 환자 전체(담당간호사 무관)를 한 명당 한 줄로 보여줍니다.
+  function renderSocialWorkerView(mkey){
+    var stats = buildCompletionStats(mkey);
+    var homeStat = stats.overall["재택"] || { done:0, total:0 };
+    document.getElementById("swStatHome").textContent = homeStat.done + "/" + homeStat.total;
+
+    var tf = S.tableFilters.socialworker;
+    var rows = S.patients
+      .filter(function(p){ return (p.categories||[]).indexOf("재택") !== -1; })
+      .map(function(p){
+        var homeVisits = (S.visitsCache[mkey] || []).filter(function(v){
+          return String(v.no) === String(p.no) && getVisitCategories(v.visitType).indexOf("재택") !== -1;
+        }).sort(function(a,b){ return (a.date||"").localeCompare(b.date||""); });
+        var latest = homeVisits.length ? homeVisits[homeVisits.length-1] : null;
+        return {
+          p: p,
+          visits: homeVisits,
+          latest: latest,
+          chip: getCategoryChipState(p, "재택", mkey),
+          mint: getSwFlag(p, SW_MINT_KEY, mkey),
+          yosang: getSwFlag(p, SW_YOSANG_KEY, mkey),
+          memo: getSwMemo(p, mkey)
+        };
+      })
+      .filter(function(r){
+        if(!rowTextMatches(r.p.name, tf.name)) return false;
+        if(tf.nurse){
+          var nurseVal = tf.nurse === "__none__" ? "" : tf.nurse;
+          if((r.latest ? (r.latest.nurse||"") : "") !== nurseVal) return false;
+        }
+        if(tf.chipState){
+          if(tf.chipState === "needsetup"){
+            if(r.chip.state !== "pending" && r.chip.state !== "needinfo") return false;
+          } else if(r.chip.state !== tf.chipState) return false;
+        }
+        if(tf.mintWorkRecord){
+          var mVal = tf.mintWorkRecord === "yes";
+          if(r.mint !== mVal) return false;
+        }
+        if(tf.yosangWorkRecord){
+          var yVal = tf.yosangWorkRecord === "yes";
+          if(r.yosang !== yVal) return false;
+        }
+        return true;
+      });
+
+    rows.sort(function(a,b){ return (a.p.name||"").localeCompare(b.p.name||"", "ko"); });
+
+    var html = '<div class="toolbar">' +
+      '<h2>재택 업무기록 <span style="font-weight:400;color:var(--ink-soft);font-size:12.5px;">(재택 등록환자 '+rows.length+'명)</span></h2>' +
+      '<button class="btn btn-sm" id="swSearchBtn">검색</button>' +
+    '</div>';
+
+    html += '<div class="assign-table-wrap"><table class="assign-table"><thead><tr>' +
+      '<th>연번</th><th>이름</th><th>방문유형</th><th>방문일자</th><th>방문간호사</th><th>필수입력</th><th>MINT<br>업무기록</th><th>요양정보마당<br>업무기록</th><th>메모</th>' +
+    '</tr>' +
+    buildFilterHeaderRow("socialworker", [
+      { key:"seq", type:"none" },
+      { key:"name", type:"text" },
+      { key:"visitType", type:"none" },
+      { key:"date", type:"none" },
+      { key:"nurse", type:"select", options: [{value:"__none__",label:"미기재"}].concat(S.staff.map(function(n){ return {value:n,label:n}; })) },
+      { key:"chipState", type:"select", options:[
+        {value:"done",label:"완료"}, {value:"partial",label:"일부완료"}, {value:"missing",label:"미완료"},
+        {value:"unvisited",label:"미방문"}, {value:"needsetup",label:"설정필요"}
+      ] },
+      { key:"mintWorkRecord", type:"select", options:[{value:"yes",label:"O"},{value:"no",label:"-"}] },
+      { key:"yosangWorkRecord", type:"select", options:[{value:"yes",label:"O"},{value:"no",label:"-"}] },
+      { key:"memo", type:"none" }
+    ]) +
+    '</thead><tbody>';
+
+    if(rows.length === 0){
+      html += '<tr><td colspan="9" style="text-align:center;color:var(--ink-soft);padding:24px;">재택으로 등록된 환자가 없습니다.</td></tr>';
+    } else {
+      rows.forEach(function(r, idx){
+        var p = r.p, latest = r.latest;
+        html += '<tr>' +
+          '<td style="color:var(--ink-soft);font-variant-numeric:tabular-nums;">'+(idx+1)+'</td>' +
+          '<td style="font-weight:600;">'+escapeHtml(p.name)+'</td>' +
+          '<td>'+(latest ? renderVisitTypeBadge(latest.visitType||"") : '<span style="color:var(--ink-soft);">-</span>')+'</td>' +
+          '<td style="white-space:nowrap;">'+(r.visits.length ? escapeHtml(r.visits.map(function(v){ return fmtMDDash(v.date); }).join(", ")) : '<span style="color:var(--ink-soft);">미방문</span>')+'</td>' +
+          '<td>'+(latest ? renderVisitNurseBadge(latest.nurse||"") : '<span style="color:var(--ink-soft);">-</span>')+'</td>' +
+          '<td style="text-align:center;"><span class="status-dot" style="background:'+chipDotColor(r.chip.state)+';" title="'+escapeHtml(r.chip.label)+'"></span></td>' +
+          '<td>'+(r.mint ? '<input type="checkbox" class="chk chk-mintwork" data-act="togglemintwork" data-pid="'+p.id+'" checked>' : '<input type="checkbox" class="chk chk-mintwork" data-act="togglemintwork" data-pid="'+p.id+'">')+'</td>' +
+          '<td>'+(r.yosang ? '<input type="checkbox" class="chk chk-yosangwork" data-act="toggleyosangwork" data-pid="'+p.id+'" checked>' : '<input type="checkbox" class="chk chk-yosangwork" data-act="toggleyosangwork" data-pid="'+p.id+'">')+'</td>' +
+          '<td class="memo-cell"><textarea class="inline-edit" rows="1" data-act="editswmemo" data-pid="'+p.id+'">'+escapeHtml(r.memo||"")+'</textarea></td>' +
+        '</tr>';
+      });
+    }
+    html += '</tbody></table></div>';
+
+    var wrap = document.getElementById("socialWorkerTableWrap");
+    wrap.innerHTML = html;
+
+    document.getElementById("swSearchBtn").addEventListener("click", function(){
+      applyPendingTextFilters("socialworker", function(){ renderSocialWorkerView(mkey); });
+    });
+    wrap.querySelectorAll('[data-act="togglemintwork"]').forEach(function(chk){
+      chk.addEventListener("click", function(ev){ ev.stopPropagation(); });
+      chk.addEventListener("change", async function(e){
+        var p = S.patients.find(function(x){ return x.id === e.target.getAttribute("data-pid"); });
+        if(!p) return;
+        await setSwFlag(p, SW_MINT_KEY, mkey, e.target.checked);
+      });
+    });
+    wrap.querySelectorAll('[data-act="toggleyosangwork"]').forEach(function(chk){
+      chk.addEventListener("click", function(ev){ ev.stopPropagation(); });
+      chk.addEventListener("change", async function(e){
+        var p = S.patients.find(function(x){ return x.id === e.target.getAttribute("data-pid"); });
+        if(!p) return;
+        await setSwFlag(p, SW_YOSANG_KEY, mkey, e.target.checked);
+      });
+    });
+    wrap.querySelectorAll('[data-act="editswmemo"]').forEach(function(inp){
+      inp.style.height = inp.scrollHeight + "px";
+      inp.addEventListener("click", function(ev){ ev.stopPropagation(); });
+      inp.addEventListener("input", function(e){
+        e.target.style.height = "auto";
+        e.target.style.height = e.target.scrollHeight + "px";
+      });
+      inp.addEventListener("change", async function(e){
+        var p = S.patients.find(function(x){ return x.id === e.target.getAttribute("data-pid"); });
+        if(!p) return;
+        await setSwMemo(p, mkey, e.target.value.trim());
+      });
+    });
+    bindFilterHeaderRow(wrap, "socialworker", function(){ renderSocialWorkerView(mkey); });
+  }
+
   async function renderChecklistTab(){
     var mkey = monthKey(S.year, S.month);
     if(!S.visitsCache[mkey]){
       S.visitsCache[mkey] = await loadVisitsForMonth(S.year, S.month);
     }
-    renderDashboard();
-    renderPatientList();
+
+    var isSW = S.checklistViewMode === "socialworker";
+    document.getElementById("dashboard").style.display = isSW ? "none" : "";
+    document.getElementById("socialWorkerStat").style.display = isSW ? "" : "none";
+    document.getElementById("checklistToolbar").style.display = isSW ? "none" : "";
+    document.getElementById("patientList").style.display = isSW ? "none" : "";
+    document.getElementById("socialWorkerTableWrap").style.display = isSW ? "" : "none";
+    document.getElementById("viewToggle").style.display = isSW ? "none" : "";
+
+    if(isSW){
+      renderSocialWorkerView(mkey);
+    } else {
+      renderDashboard();
+      renderPatientList();
+    }
   }
 
   /* ================= 모달 공통 ================= */
