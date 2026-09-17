@@ -602,6 +602,120 @@
   var K_ALL_STATES = "patient-states-all"; // 환자별 state:ID 키를 다 합쳐서 이 키 하나로 저장 (호출 횟수 절감)
   var K_MINT_CHECKERS = "mint-checkers"; // 간호사 명단과는 별개로, MINT 일방시를 체크하는 사회복지사 등의 명단
   var DEFAULT_MINT_CHECKERS = ["신현경"];
+
+  /* ================= 동시 편집 충돌 방지(3-way merge) =================
+     여러 직원이 동시에 접속해서 쓰는 앱이라, "환자 목록" 같은 걸 통째로 하나의
+     값으로 저장하면 이런 사고가 날 수 있습니다:
+       1) A가 접속 → 그 순간의 환자 78명 목록을 화면에 들고 있음
+       2) 그 사이 B가 새 환자를 등록 → 서버는 79명이 됨
+       3) A가 (새로고침 없이) 아무 환자나 하나 수정 → A가 들고 있던 예전
+          "78명짜리 전체 목록"을 그대로 다시 저장 → B가 추가한 79번째 환자가 사라짐
+     이를 막기 위해, 아래 키들은 저장 직전에 서버의 "지금 이 순간" 값을 한 번 더
+     확인해서, 그 사이 다른 사람이 추가/수정/삭제한 항목은 그대로 살리고 내가 지금
+     바꾼 항목만 얹어서 합친 뒤 저장합니다(3-way merge). 항목 구성(K_TEMPLATES)처럼
+     관리자 혼자 가끔 편집하는 항목은 충돌 위험이 낮아 이 대상에서 제외했습니다. */
+  function getMergeStrategy(key){
+    if(key === K_PATIENTS || key === K_CANDIDATES || key === K_BLOODTESTS) return "byId";
+    if(key === K_STAFF || key === K_MINT_CHECKERS) return "stringSet";
+    if(key === K_ALL_STATES) return "byMapKey";
+    if(key.indexOf("visits:") === 0) return "byId";
+    return null;
+  }
+  var STORAGE_BASELINE = {}; // key -> 마지막으로 서버에서 읽어온 시점의 스냅샷(비교 기준선)
+  function deepClone(x){ return (x===null || typeof x==="undefined") ? x : JSON.parse(JSON.stringify(x)); }
+  function sameJSON(a,b){ return JSON.stringify(a) === JSON.stringify(b); }
+  function captureBaseline(key, value){
+    if(value !== null && getMergeStrategy(key)){ STORAGE_BASELINE[key] = deepClone(value); }
+  }
+  // id를 가진 배열(환자/대상자/혈액검사/방문기록)용 3-way merge.
+  // 규칙: 나만 바꾼 항목→내 것 유지, 남만 바꾼 항목→남의 것 유지(이게 핵심 버그 수정),
+  // 둘 다 바꾼 항목→내가 지금 한 조작 우선(단, 데이터가 사라지진 않음).
+  function mergeById(baseline, current, fresh){
+    baseline = baseline || []; current = current || []; fresh = fresh || [];
+    var baseMap = {}, curMap = {}, freshMap = {};
+    baseline.forEach(function(x){ if(x && x.id) baseMap[x.id] = x; });
+    current.forEach(function(x){ if(x && x.id) curMap[x.id] = x; });
+    fresh.forEach(function(x){ if(x && x.id) freshMap[x.id] = x; });
+    var order = [], seen = {};
+    fresh.forEach(function(x){ if(x && x.id && !seen[x.id]){ order.push(x.id); seen[x.id]=true; } });
+    current.forEach(function(x){ if(x && x.id && !seen[x.id]){ order.push(x.id); seen[x.id]=true; } });
+    var result = [];
+    order.forEach(function(id){
+      var inBase = baseMap.hasOwnProperty(id), inCur = curMap.hasOwnProperty(id), inFresh = freshMap.hasOwnProperty(id);
+      if(inCur && !inBase && !inFresh){ result.push(curMap[id]); return; } // 내가 새로 추가
+      if(inFresh && !inBase && !inCur){ result.push(freshMap[id]); return; } // 남이 새로 추가
+      if(inCur && inFresh && !inBase){ result.push(curMap[id]); return; }
+      if(inBase && inCur && !inFresh){ // 남이 삭제함
+        if(sameJSON(baseMap[id], curMap[id])) return; // 나는 안 건드림 → 삭제 존중
+        result.push(curMap[id]); return; // 나는 수정했는데 남이 삭제 → 내 수정 보존
+      }
+      if(inBase && inFresh && !inCur){ // 내가 삭제함
+        if(sameJSON(baseMap[id], freshMap[id])) return; // 남도 안 건드림 → 내 삭제 그대로
+        result.push(freshMap[id]); return; // 남이 그 사이 수정 → 남의 수정 보존(삭제 취소)
+      }
+      if(inBase && inCur && inFresh){
+        var curChanged = !sameJSON(baseMap[id], curMap[id]);
+        var freshChanged = !sameJSON(baseMap[id], freshMap[id]);
+        if(!curChanged && !freshChanged){ result.push(baseMap[id]); return; }
+        if(curChanged && !freshChanged){ result.push(curMap[id]); return; }
+        if(!curChanged && freshChanged){ result.push(freshMap[id]); return; }
+        result.push(curMap[id]); return; // 둘 다 수정 → 지금 내 조작 우선
+      }
+    });
+    return result;
+  }
+  // 문자열 배열(간호사 명단, MINT 체크자 명단)용 merge: 집합 연산으로 처리
+  function mergeStringSet(baseline, current, fresh){
+    baseline = baseline || []; current = current || []; fresh = fresh || [];
+    var addedByUs = current.filter(function(x){ return baseline.indexOf(x) === -1; });
+    var removedByUs = baseline.filter(function(x){ return current.indexOf(x) === -1; });
+    var result = fresh.filter(function(x){ return removedByUs.indexOf(x) === -1; });
+    addedByUs.forEach(function(x){ if(result.indexOf(x) === -1) result.push(x); });
+    return result;
+  }
+  // 객체 맵(환자ID → 체크상태)용 merge: mergeById와 동일한 규칙을 키 단위로 적용
+  function mergeByMapKey(baseline, current, fresh){
+    baseline = baseline || {}; current = current || {}; fresh = fresh || {};
+    var keys = {};
+    Object.keys(current).forEach(function(k){ keys[k]=true; });
+    Object.keys(fresh).forEach(function(k){ keys[k]=true; });
+    var result = {};
+    Object.keys(keys).forEach(function(id){
+      var inBase = baseline.hasOwnProperty(id), inCur = current.hasOwnProperty(id), inFresh = fresh.hasOwnProperty(id);
+      if(inCur && !inBase && !inFresh){ result[id]=current[id]; return; }
+      if(inFresh && !inBase && !inCur){ result[id]=fresh[id]; return; }
+      if(inCur && inFresh && !inBase){ result[id]=current[id]; return; }
+      if(inBase && inCur && !inFresh){
+        if(sameJSON(baseline[id], current[id])) return;
+        result[id]=current[id]; return;
+      }
+      if(inBase && inFresh && !inCur){
+        if(sameJSON(baseline[id], fresh[id])) return;
+        result[id]=fresh[id]; return;
+      }
+      if(inBase && inCur && inFresh){
+        var curChanged = !sameJSON(baseline[id], current[id]);
+        var freshChanged = !sameJSON(baseline[id], fresh[id]);
+        if(!curChanged && !freshChanged){ result[id]=baseline[id]; return; }
+        if(curChanged && !freshChanged){ result[id]=current[id]; return; }
+        if(!curChanged && freshChanged){ result[id]=fresh[id]; return; }
+        result[id]=current[id]; return;
+      }
+    });
+    return result;
+  }
+  // merge 결과를 (같은 배열/객체 참조를 유지한 채) 그 자리에서 반영합니다.
+  // → 화면 코드가 들고 있는 S.patients 등의 참조가 자동으로 최신 합본을 가리키게 됩니다.
+  function applyMergedInPlace(target, merged){
+    if(Array.isArray(target) && Array.isArray(merged)){
+      target.length = 0;
+      merged.forEach(function(x){ target.push(x); });
+    } else if(target && typeof target === "object" && merged && typeof merged === "object"){
+      Object.keys(target).forEach(function(k){ delete target[k]; });
+      Object.keys(merged).forEach(function(k){ target[k] = merged[k]; });
+    }
+  }
+
   function stateKey(pid){ return "state:" + pid; }
   async function saveAllPatientStates(){
     return await storageSet(K_ALL_STATES, S.patientStates, true);
@@ -696,7 +810,9 @@
       var r = await apiCall("kv_get", { key: key });
       if(!r || !r.ok) { handleApiError(r); return null; }
       if(r.value === null || typeof r.value === "undefined") return null;
-      return JSON.parse(r.value);
+      var parsed = JSON.parse(r.value);
+      captureBaseline(key, parsed);
+      return parsed;
     }catch(e){ return null; }
   }
   async function storageSet(key, value, shared){
@@ -706,6 +822,8 @@
         return true;
       }catch(e){ return false; }
     }
+    var mergeStrategy = getMergeStrategy(key);
+    if(mergeStrategy){ return await mergeSaveOne(key, value, mergeStrategy); }
     try{
       var r = await apiCall("kv_set", { key: key, value: JSON.stringify(value) });
       if(!r || !r.ok){
@@ -713,6 +831,39 @@
         showToast("저장에 실패했습니다. 다시 시도해주세요.");
         return false;
       }
+      return true;
+    }catch(e){
+      showToast("저장에 실패했습니다. 인터넷 연결을 확인해주세요.");
+      return false;
+    }
+  }
+  // 충돌 안전 저장: 저장 직전 서버 최신값을 다시 읽어와서 merge한 뒤 저장하고,
+  // 화면이 들고 있는 값도 합쳐진 최종 결과로 갱신합니다.
+  async function mergeSaveOne(key, value, strategy){
+    try{
+      var freshResp = await apiCall("kv_get", { key: key });
+      if(!freshResp || !freshResp.ok){
+        handleApiError(freshResp);
+        showToast("저장에 실패했습니다. 다시 시도해주세요.");
+        return false;
+      }
+      var fresh = (freshResp.value === null || typeof freshResp.value === "undefined")
+        ? (strategy === "byMapKey" ? {} : [])
+        : JSON.parse(freshResp.value);
+      var baseline = STORAGE_BASELINE.hasOwnProperty(key) ? STORAGE_BASELINE[key] : (strategy === "byMapKey" ? {} : []);
+      var merged;
+      if(strategy === "byId") merged = mergeById(baseline, value, fresh);
+      else if(strategy === "stringSet") merged = mergeStringSet(baseline, value, fresh);
+      else merged = mergeByMapKey(baseline, value, fresh);
+
+      var r = await apiCall("kv_set", { key: key, value: JSON.stringify(merged) });
+      if(!r || !r.ok){
+        handleApiError(r);
+        showToast("저장에 실패했습니다. 다시 시도해주세요.");
+        return false;
+      }
+      applyMergedInPlace(value, merged);
+      STORAGE_BASELINE[key] = deepClone(merged);
       return true;
     }catch(e){
       showToast("저장에 실패했습니다. 인터넷 연결을 확인해주세요.");
@@ -749,24 +900,40 @@
       if(!r || !r.ok){ handleApiError(r); return out; }
       keys.forEach(function(k){
         var v = r.values ? r.values[k] : null;
-        out[k] = (v === null || typeof v === "undefined") ? null : JSON.parse(v);
+        var parsed = (v === null || typeof v === "undefined") ? null : JSON.parse(v);
+        out[k] = parsed;
+        captureBaseline(k, parsed);
       });
       return out;
     }catch(e){ return out; }
   }
-  // 이번 로드에서 실제로 바뀐 shared 키들을 한 번의 API 호출로 모아서 저장합니다.
+  // 이번 로드에서 실제로 바뀐 shared 키들을 저장합니다. 병합 대상 키는 개별적으로
+  // 충돌 안전 저장을 거치고, 나머지는 예전처럼 한 번의 API 호출로 묶어서 저장합니다.
+  // (이 경로는 최초 실행/마이그레이션 때만 드물게 타는 경로라 약간의 추가 호출은 괜찮습니다.)
   async function storageSetMany(pairs){
-    // pairs: [{key, value}, ...] (value는 원본 JS 값, 여기서 JSON.stringify 처리)
     if(!pairs.length) return true;
     try{
-      var items = pairs.map(function(p){ return { key: p.key, value: JSON.stringify(p.value) }; });
-      var r = await apiCall("kv_set_many", { items: items });
-      if(!r || !r.ok){
-        handleApiError(r);
-        showToast("저장에 실패했습니다. 다시 시도해주세요.");
-        return false;
+      var plainItems = [];
+      var trackedOk = true;
+      for(var i=0;i<pairs.length;i++){
+        var p = pairs[i];
+        var strategy = getMergeStrategy(p.key);
+        if(strategy){
+          var ok = await mergeSaveOne(p.key, p.value, strategy);
+          if(!ok) trackedOk = false;
+        } else {
+          plainItems.push({ key: p.key, value: JSON.stringify(p.value) });
+        }
       }
-      return true;
+      if(plainItems.length){
+        var r = await apiCall("kv_set_many", { items: plainItems });
+        if(!r || !r.ok){
+          handleApiError(r);
+          showToast("저장에 실패했습니다. 다시 시도해주세요.");
+          return false;
+        }
+      }
+      return trackedOk;
     }catch(e){
       showToast("저장에 실패했습니다. 인터넷 연결을 확인해주세요.");
       return false;
@@ -2401,6 +2568,7 @@
   // presetCandidate: 대상자 목록에서 "방문 등록" 눌렀을 때 바로 넘어오는 {no, name}
   // editVisitId: 기존 방문 수정시 방문 id (이 경우 그 방문이 속한 연/월을 찾아서 편집)
   function openVisitModal(presetCandidate, editVisitId){
+    var returnView = S.appView; // 이 모달을 연 탭을 기억해뒀다가, 저장 후 그대로 돌아가기 위함
     var editing = null, editingYear = S.visitLogYear, editingMonth = S.visitLogMonth;
     if(editVisitId){
       editing = S.visits.find(function(v){ return v.id === editVisitId; });
@@ -2552,12 +2720,13 @@
         await addSyncedChecklistDate(no, newSyncTarget.cat, newSyncTarget.group, date);
       }
 
-      // 등록/이동된 방문이 지금 보고 있는 달과 다르면, 그 달 방문목록 화면으로 전환해서 바로 보여줌
+      // 등록/이동된 방문이 지금 보고 있는 달과 다르면, 그 달 방문목록 화면으로 전환해서 바로 보여줌.
+      // 같은 달이면 방문목록 탭으로 옮기지 않고, 이 창을 열었던 탭(예: 대상자목록)에 그대로 머뭅니다.
       if(targetYear !== S.visitLogYear || targetMonth !== S.visitLogMonth){
         setAppView("visits");
         await switchVisitMonth(targetYear, targetMonth);
       } else {
-        setAppView("visits");
+        setAppView(returnView);
       }
     };
   }
