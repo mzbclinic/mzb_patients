@@ -3947,11 +3947,12 @@
     document.getElementById("swStatHome").textContent = homeStat.done + "/" + homeStat.total;
 
     var tf = S.tableFilters.socialworker;
+    var SW_DISPLAY_VISIT_TYPES = ["재택포괄", "재택정기방문"];
     var rows = S.patients
       .filter(function(p){ return (p.categories||[]).indexOf("재택") !== -1; })
       .map(function(p){
         var homeVisits = (S.visitsCache[mkey] || []).filter(function(v){
-          return String(v.no) === String(p.no) && getVisitCategories(v.visitType).indexOf("재택") !== -1;
+          return String(v.no) === String(p.no) && SW_DISPLAY_VISIT_TYPES.indexOf(v.visitType) !== -1;
         }).sort(function(a,b){ return (a.date||"").localeCompare(b.date||""); });
         var latest = homeVisits.length ? homeVisits[homeVisits.length-1] : null;
         return {
