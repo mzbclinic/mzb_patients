@@ -43,7 +43,7 @@
     padding-bottom:64px;
   }
   button{ font-family:inherit; }
-  .wrap{ max-width:760px; margin:0 auto; padding:0 14px; }
+  .wrap{ max-width:960px; margin:0 auto; padding:0 14px; }
 
   /* ---------- Top bar ---------- */
   .topbar{
@@ -52,7 +52,7 @@
     position:sticky; top:0; z-index:30;
   }
   .topbar-inner{
-    max-width:760px; margin:0 auto; padding:12px 14px;
+    max-width:960px; margin:0 auto; padding:12px 14px;
     display:flex; align-items:center; gap:10px; flex-wrap:wrap;
   }
   .brand{ display:flex; flex-direction:column; margin-right:auto; min-width:0; }
@@ -373,7 +373,7 @@
   .mint-by{ font-size:10px; color:var(--ink-soft); cursor:pointer; text-decoration:underline dotted; margin-left:2px; white-space:nowrap; }
 
   /* ---------- 상단 탭 ---------- */
-  .apptabs{ display:flex; gap:8px; max-width:760px; margin:0 auto; padding:12px 14px 0; }
+  .apptabs{ display:flex; gap:8px; max-width:960px; margin:0 auto; padding:12px 14px 0; }
   .apptab{ padding:8px 16px; border:1px solid var(--line); background:var(--paper-raised); border-radius:20px; font-size:13px; font-weight:600; color:var(--ink-soft); cursor:pointer; }
   .apptab.active{ background:var(--ink); color:#fff; border-color:var(--ink); }
 
@@ -394,6 +394,14 @@
   .assign-table-wrap thead{ position:sticky; top:0; z-index:3; }
   .assign-table-wrap thead th{ background:var(--paper-raised); }
   .assign-table{ width:100%; border-collapse:collapse; font-size:13px; min-width:620px; }
+  .cand-table{ table-layout:fixed; }
+  .cand-table th:nth-child(1), .cand-table td:nth-child(1){ width:8%; }
+  .cand-table th:nth-child(2), .cand-table td:nth-child(2){ width:13%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cand-table th:nth-child(3), .cand-table td:nth-child(3){ width:19%; }
+  .cand-table th:nth-child(4), .cand-table td:nth-child(4){ width:13%; }
+  .cand-table th:nth-child(5), .cand-table td:nth-child(5){ width:13%; }
+  .cand-table th:nth-child(6), .cand-table td:nth-child(6){ width:13%; }
+  .cand-table th:nth-child(7), .cand-table td:nth-child(7){ width:21%; }
   .assign-table th, .assign-table td{ padding:9px 10px; border-bottom:1px solid var(--line-soft); text-align:left; white-space:nowrap; }
   .assign-table th{ color:var(--ink-soft); font-weight:600; font-size:11.5px; background:var(--paper); }
   .assign-table tbody tr:hover{ background:var(--paper); }
@@ -887,27 +895,19 @@
   // 화면이 들고 있는 값도 합쳐진 최종 결과로 갱신합니다.
   async function mergeSaveOne(key, value, strategy){
     try{
-      var freshResp = await apiCall("kv_get", { key: key });
-      if(!freshResp || !freshResp.ok){
-        handleApiError(freshResp);
-        showToast("저장에 실패했습니다. 다시 시도해주세요.");
-        return false;
-      }
-      var fresh = (freshResp.value === null || typeof freshResp.value === "undefined")
-        ? (strategy === "byMapKey" ? {} : [])
-        : JSON.parse(freshResp.value);
       var baseline = STORAGE_BASELINE.hasOwnProperty(key) ? STORAGE_BASELINE[key] : (strategy === "byMapKey" ? {} : []);
-      var merged;
-      if(strategy === "byId") merged = mergeById(baseline, value, fresh);
-      else if(strategy === "stringSet") merged = mergeStringSet(baseline, value, fresh);
-      else merged = mergeByMapKey(baseline, value, fresh);
-
-      var r = await apiCall("kv_set", { key: key, value: JSON.stringify(merged) });
+      var r = await apiCall("kv_merge_set", {
+        key: key,
+        value: JSON.stringify(value),
+        baseline: JSON.stringify(baseline),
+        strategy: strategy
+      });
       if(!r || !r.ok){
         handleApiError(r);
         showToast("저장에 실패했습니다. 다시 시도해주세요.");
         return false;
       }
+      var merged = JSON.parse(r.value);
       applyMergedInPlace(value, merged);
       STORAGE_BASELINE[key] = deepClone(merged);
       return true;
@@ -2002,7 +2002,7 @@
       '<button class="btn btn-sm btn-teal" id="candSearchBtn">검색</button>' +
     '</div>';
 
-    html += '<div class="assign-table-wrap"><table class="assign-table"><thead><tr>' +
+    html += '<div class="assign-table-wrap"><table class="assign-table cand-table"><thead><tr>' +
       '<th>번호</th><th>이름</th><th>구분</th><th>고정방문</th><th>등록날짜</th><th>담당간호사</th><th></th>' +
     '</tr>' +
     buildFilterHeaderRow("candidates", [
@@ -2557,7 +2557,7 @@
     });
     el.querySelectorAll('[data-act="togglemint"]').forEach(function(chk){
       chk.addEventListener("click", async function(ev){ ev.stopPropagation(); });
-      chk.addEventListener("change", async function(e){
+      chk.addEventListener("change", function(e){
         var vid = e.target.getAttribute("data-vid");
         var v = S.visits.find(function(x){ return x.id === vid; });
         if(!v) return;
@@ -2567,23 +2567,38 @@
         } else {
           delete v.mintCheckedBy;
         }
-        await saveVisitsForMonth(S.visitLogYear, S.visitLogMonth, S.visits);
+        // 화면은 그대로 두고 관리자용 "체크한 사람" 표시만 필요하면 옆에 즉시 붙여줍니다 (표 전체를 다시 그리지 않음 -> 스크롤 위치 유지)
+        var labelEl = e.target.parentElement.querySelector(".mint-by");
+        if(S.adminMode && v.mintVisit){
+          if(!labelEl){
+            labelEl = document.createElement("span");
+            labelEl.className = "mint-by";
+            labelEl.setAttribute("data-act", "editmintby");
+            labelEl.setAttribute("data-vid", v.id);
+            labelEl.title = "클릭하면 체크한 사람을 바꿀 수 있습니다";
+            e.target.parentElement.appendChild(labelEl);
+            bindMintByLabel(labelEl);
+          }
+          labelEl.textContent = v.mintCheckedBy || "미지정";
+        } else if(labelEl){
+          labelEl.remove();
+        }
         showToast(v.mintVisit ? "MINT 일방시 체크되었습니다." : "MINT 일방시 체크 해제되었습니다.");
-        renderVisitsView();
+        saveVisitsForMonth(S.visitLogYear, S.visitLogMonth, S.visits); // 저장은 백그라운드로 - 화면은 기다리지 않음
       });
     });
     el.querySelectorAll('[data-act="togglehira"]').forEach(function(chk){
       chk.addEventListener("click", function(ev){ ev.stopPropagation(); });
-      chk.addEventListener("change", async function(e){
+      chk.addEventListener("change", function(e){
         var vid = e.target.getAttribute("data-vid");
         var v = S.visits.find(function(x){ return x.id === vid; });
         if(!v) return;
         v.hiraLinked = e.target.checked;
-        await saveVisitsForMonth(S.visitLogYear, S.visitLogMonth, S.visits);
         showToast(v.hiraLinked ? "HIRA 연동 체크되었습니다." : "HIRA 연동 체크 해제되었습니다.");
+        saveVisitsForMonth(S.visitLogYear, S.visitLogMonth, S.visits); // 백그라운드 저장
       });
     });
-    el.querySelectorAll('[data-act="editmintby"]').forEach(function(span){
+    function bindMintByLabel(span){
       span.addEventListener("click", async function(ev){
         ev.stopPropagation();
         var vid = span.getAttribute("data-vid");
@@ -2594,11 +2609,12 @@
         var chosen = await showSelectPrompt("MINT 일방시를 체크한 사람", options, v.mintCheckedBy || "");
         if(chosen === null) return;
         v.mintCheckedBy = chosen;
-        await saveVisitsForMonth(S.visitLogYear, S.visitLogMonth, S.visits);
+        span.textContent = chosen || "미지정";
         showToast("체크한 사람이 수정되었습니다.");
-        renderVisitsView();
+        saveVisitsForMonth(S.visitLogYear, S.visitLogMonth, S.visits); // 백그라운드 저장
       });
-    });
+    }
+    el.querySelectorAll('[data-act="editmintby"]').forEach(bindMintByLabel);
     el.querySelectorAll('[data-act="toggleblood"]').forEach(function(chk){
       chk.addEventListener("click", async function(ev){ ev.stopPropagation(); });
       chk.addEventListener("change", async function(e){
@@ -4027,12 +4043,12 @@
       });
     });
     wrap.querySelectorAll('[data-act="check"]').forEach(function(el){
-      el.addEventListener("click", async function(ev){
+      el.addEventListener("click", function(ev){
         ev.stopPropagation();
         var pid = el.getAttribute("data-pid");
         var key = decodeURIComponent(el.getAttribute("data-key"));
         var mkey = el.getAttribute("data-mkey") || monthKey(S.year, S.month);
-        await setCheckItem(pid, key, mkey, el.checked);
+        setCheckItem(pid, key, mkey, el.checked); // 상태 변경은 즉시, 저장은 백그라운드로
         renderAll();
       });
     });
@@ -4331,26 +4347,26 @@
     });
     wrap.querySelectorAll('[data-act="togglemintwork"]').forEach(function(chk){
       chk.addEventListener("click", function(ev){ ev.stopPropagation(); });
-      chk.addEventListener("change", async function(e){
+      chk.addEventListener("change", function(e){
         var p = S.patients.find(function(x){ return x.id === e.target.getAttribute("data-pid"); });
         if(!p) return;
-        await setSwFlag(p, SW_MINT_KEY, mkey, e.target.checked);
+        setSwFlag(p, SW_MINT_KEY, mkey, e.target.checked);
       });
     });
     wrap.querySelectorAll('[data-act="toggleyosangwork"]').forEach(function(chk){
       chk.addEventListener("click", function(ev){ ev.stopPropagation(); });
-      chk.addEventListener("change", async function(e){
+      chk.addEventListener("change", function(e){
         var p = S.patients.find(function(x){ return x.id === e.target.getAttribute("data-pid"); });
         if(!p) return;
-        await setSwFlag(p, SW_YOSANG_KEY, mkey, e.target.checked);
+        setSwFlag(p, SW_YOSANG_KEY, mkey, e.target.checked);
       });
     });
     wrap.querySelectorAll('[data-act="toggletongdol"]').forEach(function(chk){
       chk.addEventListener("click", function(ev){ ev.stopPropagation(); });
-      chk.addEventListener("change", async function(e){
+      chk.addEventListener("change", function(e){
         var p = S.patients.find(function(x){ return x.id === e.target.getAttribute("data-pid"); });
         if(!p) return;
-        await setTongdolChecked(p, mkey, e.target.checked);
+        setTongdolChecked(p, mkey, e.target.checked);
         renderSocialWorkerView(mkey); // 체크시 "N월 의뢰" 표시를 바로 반영
       });
     });
@@ -4363,16 +4379,17 @@
         var current = getTongdol(p, mkey).referralMonth;
         var chosen = await showMonthPrompt("통돌 의뢰월을 선택해주세요.", current);
         if(!chosen) return;
-        await setTongdolMonth(p, mkey, chosen);
+        setTongdolMonth(p, mkey, chosen);
         renderSocialWorkerView(mkey);
       });
     });
     wrap.querySelectorAll('[data-act="editswstatus"]').forEach(function(inp){
       inp.addEventListener("click", function(ev){ ev.stopPropagation(); });
-      inp.addEventListener("change", async function(e){
+      inp.addEventListener("change", function(e){
         var p = S.patients.find(function(x){ return x.id === e.target.getAttribute("data-pid"); });
         if(!p) return;
-        await setSwText(p, SW_STATUS_KEY, mkey, e.target.value);
+        setSwText(p, SW_STATUS_KEY, mkey, e.target.value);
+        renderSocialWorkerView(mkey); // 상태에 따라 정렬 순서가 바뀌므로 다시 그림
       });
     });
     wrap.querySelectorAll('[data-act="editswmemo"]').forEach(function(inp){
@@ -4382,10 +4399,10 @@
         e.target.style.height = "auto";
         e.target.style.height = e.target.scrollHeight + "px";
       });
-      inp.addEventListener("change", async function(e){
+      inp.addEventListener("change", function(e){
         var p = S.patients.find(function(x){ return x.id === e.target.getAttribute("data-pid"); });
         if(!p) return;
-        await setSwMemo(p, mkey, e.target.value.trim());
+        setSwMemo(p, mkey, e.target.value.trim());
       });
     });
     bindFilterHeaderRow(wrap, "socialworker", function(){ renderSocialWorkerView(mkey); });
