@@ -2250,6 +2250,8 @@
 
   // 방문유형 고정 선택지 (탭 간 색상 일관성을 위해 정확히 일치하는 값만 사용)
   var VISIT_TYPES = ["재택포괄", "재택정기방문", "단독간호", "추가간호", "일방시", "일방시(의사단독)", "의단+간단", "장주사포괄", "장주사중간", "장주사의간동반", "장주사단독간호"];
+  // 방문목록에서 MINT 일방시 / HIRA 연동 체크박스를 표시할 방문유형 (일방시 성격이 있는 방문만)
+  var MINT_HIRA_ELIGIBLE_TYPES = ["재택포괄", "재택정기방문", "일방시", "일방시(의사단독)", "의단+간단"];
 
   // 방문유형별로 해당하는 구분(재택/일방시/장주사)과, 구분별로 처리하는 중분류(그룹)를 매핑합니다.
   // "의단+간단"처럼 한 방문이 여러 구분·그룹을 동시에 처리하는 경우도 있어서, 구분마다 그룹 배열을 따로 둡니다.
@@ -2531,10 +2533,17 @@
           '<td class="memo-cell"><textarea class="inline-edit" rows="1" data-act="editmemo" data-vid="'+v.id+'">'+escapeHtml(v.memo||"")+'</textarea></td>' +
           '<td>'+(v.bloodTest ? '<input type="checkbox" class="chk" data-act="toggleblood" data-vid="'+v.id+'" checked>' : '<input type="checkbox" class="chk" data-act="toggleblood" data-vid="'+v.id+'">')+'</td>' +
           '<td class="memo-cell"><textarea class="inline-edit" rows="1" data-act="editnote" data-vid="'+v.id+'">'+escapeHtml(v.note||"")+'</textarea></td>' +
-          '<td>'+(v.mintVisit ? '<input type="checkbox" class="chk chk-mint" data-act="togglemint" data-vid="'+v.id+'" checked>' : '<input type="checkbox" class="chk chk-mint" data-act="togglemint" data-vid="'+v.id+'">')+
-            (S.adminMode && v.mintVisit ? ' <span class="mint-by" data-act="editmintby" data-vid="'+v.id+'" title="클릭하면 체크한 사람을 바꿀 수 있습니다">'+escapeHtml(v.mintCheckedBy||"미지정")+'</span>' : '') +
-          '</td>' +
-          '<td>'+(v.hiraLinked ? '<input type="checkbox" class="chk chk-hira" data-act="togglehira" data-vid="'+v.id+'" checked>' : '<input type="checkbox" class="chk chk-hira" data-act="togglehira" data-vid="'+v.id+'">')+'</td>' +
+          (function(){
+            var eligible = MINT_HIRA_ELIGIBLE_TYPES.indexOf(v.visitType) !== -1;
+            if(!eligible){
+              return '<td style="text-align:center;color:var(--ink-soft);">-</td><td style="text-align:center;color:var(--ink-soft);">-</td>';
+            }
+            var mintCell = '<td>'+(v.mintVisit ? '<input type="checkbox" class="chk chk-mint" data-act="togglemint" data-vid="'+v.id+'" checked>' : '<input type="checkbox" class="chk chk-mint" data-act="togglemint" data-vid="'+v.id+'">')+
+              (S.adminMode && v.mintVisit ? ' <span class="mint-by" data-act="editmintby" data-vid="'+v.id+'" title="클릭하면 체크한 사람을 바꿀 수 있습니다">'+escapeHtml(v.mintCheckedBy||"미지정")+'</span>' : '') +
+            '</td>';
+            var hiraCell = '<td>'+(v.hiraLinked ? '<input type="checkbox" class="chk chk-hira" data-act="togglehira" data-vid="'+v.id+'" checked>' : '<input type="checkbox" class="chk chk-hira" data-act="togglehira" data-vid="'+v.id+'">')+'</td>';
+            return mintCell + hiraCell;
+          })() +
         '</tr>';
       });
     }
