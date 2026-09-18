@@ -1856,8 +1856,18 @@
         }).join("");
         return '<td><select class="tf-input" data-tf-table="'+tableId+'" data-tf-key="'+col.key+'">'+opts+'</select></td>';
       }
+      if(col.type === "multiselect"){
+        var selectedVals = filters[col.key] || [];
+        var mopts = col.options.map(function(o){
+          return '<option value="'+escapeHtml(o.value)+'" '+(selectedVals.indexOf(o.value)!==-1?"selected":"")+'>'+escapeHtml(o.label)+'</option>';
+        }).join("");
+        return '<td><select class="tf-input" multiple size="1" data-tf-table="'+tableId+'" data-tf-key="'+col.key+'" style="min-height:26px;">'+mopts+'</select></td>';
+      }
       if(col.type === "month"){
         return '<td><input type="month" class="tf-input" data-tf-table="'+tableId+'" data-tf-key="'+col.key+'" value="'+escapeHtml(filters[col.key]||"")+'"></td>';
+      }
+      if(col.type === "date"){
+        return '<td><input type="date" class="tf-input" data-tf-table="'+tableId+'" data-tf-key="'+col.key+'" value="'+escapeHtml(filters[col.key]||"")+'"></td>';
       }
       return '<td><input type="text" class="tf-input" data-tf-table="'+tableId+'" data-tf-key="'+col.key+'" value="'+escapeHtml(filters[col.key]||"")+'" placeholder="검색"></td>';
     }).join("") + '</tr>';
@@ -1876,7 +1886,14 @@
   function bindFilterHeaderRow(el, tableId, onChangeRender){
     el.querySelectorAll('.tf-input[data-tf-table="'+tableId+'"]').forEach(function(inp){
       inp.addEventListener("click", function(ev){ ev.stopPropagation(); });
-      if(inp.tagName === "SELECT" || inp.type === "month"){
+      if(inp.tagName === "SELECT" && inp.multiple){
+        // 다중선택형: 고른 값들을 배열로 저장, 고르는 즉시 적용
+        inp.addEventListener("change", function(e){
+          var key = e.target.getAttribute("data-tf-key");
+          S.tableFilters[tableId][key] = Array.prototype.slice.call(e.target.selectedOptions).map(function(o){ return o.value; });
+          onChangeRender();
+        });
+      } else if(inp.tagName === "SELECT" || inp.type === "month" || inp.type === "date"){
         // 선택형/달력형은 고르는 즉시(change) 바로 적용
         inp.addEventListener("change", function(e){
           var key = e.target.getAttribute("data-tf-key");
@@ -4242,6 +4259,13 @@
       })
       .filter(function(r){
         if(!rowTextMatches(r.p.name, tf.name)) return false;
+        if(tf.visitType && tf.visitType.length){
+          var visitTypesInRow = r.visits.map(function(v){ return v.visitType; });
+          if(!tf.visitType.some(function(t){ return visitTypesInRow.indexOf(t) !== -1; })) return false;
+        }
+        if(tf.date){
+          if(!r.visits.some(function(v){ return v.date === tf.date; })) return false;
+        }
         if(tf.nurse){
           var nurseVal = tf.nurse === "__none__" ? "" : tf.nurse;
           if((r.latest ? (r.latest.nurse||"") : "") !== nurseVal) return false;
@@ -4295,8 +4319,8 @@
     buildFilterHeaderRow("socialworker", [
       { key:"seq", type:"none" },
       { key:"name", type:"none" },
-      { key:"visitType", type:"none" },
-      { key:"date", type:"none" },
+      { key:"visitType", type:"multiselect", options: SW_DISPLAY_VISIT_TYPES.map(function(t){ return {value:t,label:t}; }) },
+      { key:"date", type:"date" },
       { key:"nurse", type:"select", options: [{value:"__none__",label:"미기재"}].concat(S.staff.map(function(n){ return {value:n,label:n}; })) },
       { key:"chipState", type:"select", options:[
         {value:"done",label:"완료"}, {value:"partial",label:"일부완료"}, {value:"missing",label:"미완료"},
