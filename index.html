@@ -2451,7 +2451,8 @@
     var list = S.visits.slice()
       .filter(function(v){
         if(!rowTextMatches(v.name, tf.name)) return false;
-        if(!rowSelectMatches(v.visitType, tf.visitType)) return false;
+        if(tf.date && v.date !== tf.date) return false;
+        if(tf.visitType && tf.visitType.length && tf.visitType.indexOf(v.visitType) === -1) return false;
         if(tf.nurse){
           var nurseVal = tf.nurse === "__none__" ? "" : tf.nurse;
           if((v.nurse||"") !== nurseVal) return false;
@@ -2503,10 +2504,10 @@
     '</tr>' +
     buildFilterHeaderRow("visits", [
       { key:"seq", type:"none" },
-      { key:"date", type:"none" }
+      { key:"date", type:"date" }
     ].concat(showVisitNo ? [{ key:"visitNo", type:"none" }] : []).concat([
       { key:"name", type:"text" },
-      { key:"visitType", type:"select", options: VISIT_TYPES.map(function(t){ return {value:t,label:t}; }) },
+      { key:"visitType", type:"multiselect", options: VISIT_TYPES.map(function(t){ return {value:t,label:t}; }) },
       { key:"nurse", type:"select", options: [{value:"__none__",label:"미기재"}].concat(S.staff.map(function(n){ return {value:n,label:n}; })) },
       { key:"memo", type:"none" },
       { key:"bloodTest", type:"none" },
@@ -3451,6 +3452,37 @@
     return (S.visitsCache[mkey] || []).some(function(v){ return String(v.no) === String(p.no); });
   }
 
+  // "비담당환자"에 해당하는 이번달 방문자 전체: (1) 등록은 되어 있는데 담당간호사가 없는 환자,
+  // (2) 환자배정에 아예 등록되지 않은 대상자(가상환자) 둘 다 포함해야 합니다. 등록번호 기준으로 중복 제거.
+  function getUnassignedPatientsThisMonth(mkey){
+    var list = S.visitsCache[mkey] || [];
+    var isSpecificNurse = (S.who !== "전체" && S.who !== DOCTOR_NAME);
+    var seen = {};
+    var result = [];
+    list.forEach(function(v){
+      if(!v.no || seen[v.no]) return;
+      if(isSpecificNurse && v.nurse !== S.who) return; // 특정 간호사 탭에서는 그 간호사가 실제 방문한 경우만
+      var registered = S.patients.find(function(p){ return String(p.no) === String(v.no); });
+      if(registered){
+        if(registered.nurse) return; // 담당간호사가 있으면 비담당이 아님
+        seen[v.no] = true;
+        result.push(registered);
+      } else {
+        seen[v.no] = true;
+        var catsForNo = {};
+        list.forEach(function(v2){
+          if(String(v2.no) !== String(v.no)) return;
+          getVisitCategories(v2.visitType).forEach(function(cat){ catsForNo[cat] = true; });
+        });
+        var categories = Object.keys(catsForNo);
+        var startMonths = {};
+        categories.forEach(function(c){ startMonths[c] = mkey; });
+        result.push({ id:"virtual_"+v.no, no:v.no, name:v.name, nurse:"", categories:categories, startMonths:startMonths, isVirtual:true });
+      }
+    });
+    return result;
+  }
+
   function renderDashboard(){
     var mkey = monthKey(S.year, S.month);
     var stats = buildCompletionStats(mkey);
@@ -3470,11 +3502,19 @@
       document.getElementById(elId).title = hasMulti ? "이번달 "+c+" 방문이 2회 이상인 환자가 있습니다. 눌러서 상황판에서 확인하세요." : "";
     });
 
-    // 우측: 비담당환자(담당간호사 미지정) 중 이번달에 실제로 방문한 사람만.
-    var unassignedCount = S.patients.filter(function(p){ return !p.nurse && patientHasAnyVisitThisMonth(p, mkey); }).length;
-    document.getElementById("statUnassigned").textContent = unassignedCount;
-    var uv = stats.unassigned["일방시"] || { done:0, total:0 };
-    document.getElementById("statUnassignedVisit").textContent = uv.done + "/" + uv.total;
+    // 우측: 비담당환자(담당간호사 미지정 + 환자배정 미등록 대상자 포함) 중 이번달에 실제로 방문한 사람.
+    var unassignedPatients = getUnassignedPatientsThisMonth(mkey);
+    document.getElementById("statUnassigned").textContent = unassignedPatients.length;
+    var uvDone = 0, uvTotal = 0;
+    unassignedPatients.forEach(function(p){
+      if((p.categories||[]).indexOf("일방시") === -1) return;
+      if(!patientCategoryVisitedThisMonth(p, "일방시", mkey)) return;
+      var status = computeCategoryStatus(p, "일방시", mkey);
+      if(!status) return;
+      uvTotal++;
+      if(status.satisfied) uvDone++;
+    });
+    document.getElementById("statUnassignedVisit").textContent = uvDone + "/" + uvTotal;
 
     document.querySelectorAll(".dash-stat-clickable").forEach(function(el){
       el.classList.toggle("selected", el.getAttribute("data-cat") === S.dashboardCategory);
