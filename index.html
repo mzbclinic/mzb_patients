@@ -789,7 +789,7 @@
     appView: "checklist", // "checklist" | "assignment" | "candidates"
     candidates: [],
     candidateFilter: "all", // "all" | "fixed"
-    candidateSort: "name", // "no" | "name" | "type" | "freq" | "registeredDate" | "nurse"
+    candidateSort: "no", // "no" | "name" | "type" | "freq" | "registeredDate" | "nurse"
     visitLogYear: null,
     visitLogMonth: null,
     visits: [],
@@ -1715,10 +1715,7 @@
   /* ================= 상단 탭 전환 ================= */
   function updateTabVisibility(){
     var tab = document.getElementById("tabAssignment");
-    tab.style.display = S.adminMode ? "" : "none";
-    if(!S.adminMode && S.appView === "assignment"){
-      setAppView("checklist");
-    }
+    tab.style.display = "";
   }
 
   function setAppView(v){
@@ -1839,7 +1836,9 @@
   /* ================= 대상자 목록 화면 (전체 대상자 + 고정방문 리스트 병합) ================= */
   var CANDIDATE_TYPES = ["재택", "일방시", "장주사", "보류"];
   var CANDIDATE_FREQS = ["해당없음", "매주", "2주마다", "매달", "2달마다", "미정(확인필요)", "미방문"];
-  var FIXED_FREQS = ["매주", "2주마다", "매달", "2달마다", "미정(확인필요)"]; // "고정방문 대상"으로 간주하는 주기
+  // "고정방문"이 해당없음/미정(확인필요)/미방문 중 하나면 비고정환자, 그 외(매주/2주마다/매달/2달마다 등
+  // 실제 주기가 정해진 경우)는 고정환자로 분류합니다.
+  var NON_FIXED_FREQS = ["해당없음", "미정(확인필요)", "미방문"];
 
   /* ---- 탭별 열 필터 (엑셀 자동필터 방식) ---- */
   // columns: [{key, label, type:'text'|'select', options:[{value,label}]}]
@@ -1929,7 +1928,7 @@
   }
 
   function isFixedVisitCandidate(c){
-    return FIXED_FREQS.indexOf(c.freq) !== -1;
+    return !!c.freq && NON_FIXED_FREQS.indexOf(c.freq) === -1;
   }
 
   // 대상자·환자 전체를 통틀어 가장 큰 번호 다음 값을 다음 번호로 제안합니다.
@@ -2062,7 +2061,7 @@
 
     el.innerHTML = html;
 
-    document.getElementById("addCandidateBtn").addEventListener("click", function(){ openCandidateModal(); });
+    document.getElementById("addCandidateBtn").addEventListener("click", function(){ openAddPatientModal(); });
     el.querySelectorAll('[data-filter]').forEach(function(btn){
       btn.addEventListener("click", function(){
         S.candidateFilter = btn.getAttribute("data-filter");
@@ -2077,7 +2076,10 @@
       applyPendingTextFilters("candidates", renderCandidateView);
     });
     el.querySelectorAll('[data-act="editcand"]').forEach(function(btn){
-      btn.addEventListener("click", function(){ openCandidateModal(btn.getAttribute("data-cid")); });
+      btn.addEventListener("click", function(){
+        var c = S.candidates.find(function(x){ return x.id === btn.getAttribute("data-cid"); });
+        openAddPatientModal(c ? c.no : null);
+      });
     });
     el.querySelectorAll('[data-act="addvisit"]').forEach(function(btn){
       btn.addEventListener("click", function(){
@@ -2089,110 +2091,10 @@
     bindFilterHeaderRow(el, "candidates", renderCandidateView);
   }
 
-  function openCandidateModal(editId){
-    var editing = editId ? S.candidates.find(function(x){ return x.id === editId; }) : null;
-    var editingTypes = editing ? (editing.types || []) : [];
-
-    var typeChecks = CANDIDATE_TYPES.map(function(t){
-      var checked = editingTypes.indexOf(t) !== -1;
-      return '<label><input type="checkbox" name="cTypeChk" value="'+t+'" '+(checked?'checked':'')+'> '+t+'</label>';
-    }).join("");
-    var freqOptions = CANDIDATE_FREQS.map(function(f){
-      return '<option value="'+f+'" '+(editing && editing.freq===f ? "selected" : (!editing && f==="해당없음" ? "selected":""))+'>'+f+'</option>';
-    }).join("");
-    var nurseOptions = '<option value="">선택 안 함</option>' + S.staff.map(function(n){
-      return '<option value="'+escapeHtml(n)+'" '+(editing && editing.nurse===n ? "selected" : "")+'>'+escapeHtml(n)+'</option>';
-    }).join("") + '<option value="__add__">+ 새 이름 추가</option>';
-
-    var showNurse = editing ? (FIXED_FREQS.indexOf(editing.freq) !== -1) : false;
-    var defaultNo = editing ? (editing.no || "") : getNextCandidateNo();
-
-    openModal(
-      '<h3>'+(editing?'대상자 정보 수정':'새 대상자 추가')+'</h3>' +
-      '<div class="field"><label>번호</label><input type="text" id="cNo" value="'+escapeHtml(defaultNo)+'" placeholder="예: 78"></div>' +
-      '<div class="field"><label>이름</label><input type="text" id="cName" value="'+(editing?escapeHtml(editing.name):"")+'" placeholder="예: 최옥희"></div>' +
-      '<div class="field"><label>구분 (복수 선택 가능)</label><div class="check-group">'+typeChecks+'</div></div>' +
-      '<div class="field"><label>고정방문</label><select id="cFreq">'+freqOptions+'</select></div>' +
-      '<div class="field"><label>등록날짜 (선택)</label><input type="date" id="cRegDate" value="'+(editing?escapeHtml(editing.registeredDate||""):"")+'">' +
-        '<p style="font-size:11.5px;color:var(--ink-soft);margin-top:4px;">등록날짜를 정하면, 체크리스트 탭에서 그 달부터 이 환자가 표시됩니다.</p>' +
-      '</div>' +
-      '<div class="field" id="cNurseField" style="display:'+(showNurse?'':'none')+';">' +
-        '<label>담당 간호사</label><select id="cNurse">'+nurseOptions+'</select>' +
-        '<p style="font-size:11.5px;color:var(--ink-soft);margin-top:4px;">담당 간호사를 지정하면 "환자배정 관리" 탭에도 자동으로 등록됩니다.</p>' +
-      '</div>' +
-      '<div class="modal-actions">' +
-        '<button class="btn" id="cCancel">취소</button>' +
-        (editing ? '<button class="btn" style="color:var(--warn);border-color:var(--warn);" id="cDelete">삭제</button>' : '') +
-        '<button class="btn btn-teal" id="cSave">'+(editing?'저장':'추가')+'</button>' +
-      '</div>'
-    );
-
-    document.getElementById("cFreq").addEventListener("change", function(e){
-      var isFixed = FIXED_FREQS.indexOf(e.target.value) !== -1;
-      document.getElementById("cNurseField").style.display = isFixed ? "" : "none";
-    });
-
-    document.getElementById("cNurse").addEventListener("change", async function(e){
-      if(e.target.value === "__add__"){
-        var name = await showNestedPrompt("담당 간호사 이름을 입력해주세요.");
-        var sel = document.getElementById("cNurse");
-        if(name){
-          name = name.trim();
-          if(name && S.staff.indexOf(name) === -1){ S.staff.push(name); await storageSet(K_STAFF, S.staff, true); }
-          var opt = document.createElement("option");
-          opt.value = name; opt.textContent = name;
-          sel.insertBefore(opt, sel.querySelector('option[value="__add__"]'));
-          sel.value = name;
-        } else {
-          sel.value = editing && editing.nurse ? editing.nurse : "";
-        }
-      }
-    });
-
-    document.getElementById("cCancel").onclick = closeModal;
-    if(editing){
-      document.getElementById("cDelete").onclick = async function(){
-        var ok = await showConfirm(editing.name + " 님을 대상자 목록에서 삭제할까요?");
-        if(!ok) return;
-        S.candidates = S.candidates.filter(function(x){ return x.id !== editing.id; });
-        await storageSet(K_CANDIDATES, S.candidates, true);
-        closeModal();
-        showToast("삭제되었습니다.");
-        renderAll();
-      };
-    }
-    document.getElementById("cSave").onclick = async function(){
-      var no = document.getElementById("cNo").value.trim();
-      var name = document.getElementById("cName").value.trim();
-      var types = Array.prototype.slice.call(document.querySelectorAll('input[name="cTypeChk"]:checked')).map(function(c){ return c.value; });
-      var freq = document.getElementById("cFreq").value;
-      var registeredDate = document.getElementById("cRegDate").value;
-      var nurseField = document.getElementById("cNurse");
-      var nurse = nurseField ? nurseField.value : "";
-      if(nurse === "__add__") nurse = ""; // 새 이름 추가 중 저장 눌렀을 때 안전장치
-      if(!name){ showToast("이름을 입력해주세요."); return; }
-
-      var target;
-      if(editing){
-        editing.no = no; editing.name = name; editing.types = types; editing.freq = freq; editing.nurse = nurse; editing.registeredDate = registeredDate;
-        target = editing;
-      } else {
-        target = { id: uid("c"), no:no, name:name, types:types, freq:freq, nurse:nurse, registeredDate:registeredDate, createdAt: todayStr() };
-        S.candidates.push(target);
-      }
-      await storageSet(K_CANDIDATES, S.candidates, true);
-      await syncCandidateToPatient(target);
-      await syncRegisteredDateToPatient(target);
-      closeModal();
-      showToast(editing ? "수정되었습니다." : "추가되었습니다.");
-      renderAll();
-    };
-  }
-
   // 대상자가 "고정방문 + 담당간호사 지정" 상태가 되면 환자배정(체크리스트)에도 자동 등록/갱신합니다.
   // 기존 환자 데이터를 지우는 방향으로는 절대 동작하지 않습니다(연결 해제해도 이미 만들어진 환자는 그대로 둠).
   async function syncCandidateToPatient(candidate){
-    if(!candidate.nurse || FIXED_FREQS.indexOf(candidate.freq) === -1) return;
+    if(!candidate.nurse || NON_FIXED_FREQS.indexOf(candidate.freq) !== -1) return;
 
     var patient = null;
     if(candidate.linkedPatientId){
@@ -2206,6 +2108,8 @@
 
     if(patient){
       patient.nurse = candidate.nurse;
+      patient.freq = candidate.freq;
+      if(candidate.location) patient.location = candidate.location;
       validCats.forEach(function(cat){
         if(patient.categories.indexOf(cat) === -1){ patient.categories.push(cat); }
       });
@@ -2213,7 +2117,8 @@
     } else {
       var newP = {
         id: (candidate.no || uid("p")), no: candidate.no || "", name: candidate.name, nurse: candidate.nurse,
-        categories: validCats.slice(), startMonths: {}, registeredDate: candidate.registeredDate || "",
+        freq: candidate.freq, categories: validCats.slice(), startMonths: {}, location: candidate.location || "",
+        registeredDate: candidate.registeredDate || "",
         createdAt: todayStr()
       };
       S.patients.push(newP);
@@ -3312,7 +3217,7 @@
     var countTypes = MULTI_VISIT_COUNT_TYPES[cat];
     if(!countTypes) return [];
     return getNurseFilteredPatients()
-      .filter(function(p){ return !!p.nurse && (p.categories||[]).indexOf(cat) !== -1; })
+      .filter(function(p){ return isAssignedPatient(p) && (p.categories||[]).indexOf(cat) !== -1; })
       .map(function(p){
         var count = (S.visitsCache[mkey] || []).filter(function(v){
           return String(v.no) === String(p.no) && countTypes.indexOf(v.visitType) !== -1;
@@ -3341,7 +3246,7 @@
   function buildCategoryBoard(cat, mkey){
     var groups = S.templates[cat] || [];
     var activePatients = getNurseFilteredPatients().filter(function(p){
-      return !!p.nurse // 고정환자(담당간호사 있음)만 - 비담당환자는 우측 별도 통계에서 다룸
+      return isAssignedPatient(p) // 담당환자(고정+담당간호사)만 - 비담당환자는 우측 별도 통계에서 다룸
         && (p.categories||[]).indexOf(cat) !== -1
         && getPhase(p, cat, mkey) !== null
         && patientCategoryVisitedThisMonth(p, cat, mkey);
@@ -3430,24 +3335,24 @@
 
   /* ================= 렌더 : 대시보드 ================= */
   function buildCompletionStats(mkey){
-    var overall = {}; CATS.forEach(function(c){ overall[c] = {done:0, total:0}; });      // 고정환자(담당간호사 있음)만 집계
-    var unassigned = {}; CATS.forEach(function(c){ unassigned[c] = {done:0, total:0}; }); // 비담당환자(담당간호사 없음)만 집계
-    var byNurse = {}; // nurse -> {cat:{done,total}} (고정환자 기준, "미배정"은 여기서 제외)
+    var overall = {}; CATS.forEach(function(c){ overall[c] = {done:0, total:0}; });      // 담당환자(고정+담당간호사)만 집계
+    var unassigned = {}; CATS.forEach(function(c){ unassigned[c] = {done:0, total:0}; }); // 비담당환자만 집계
+    var byNurse = {}; // nurse -> {cat:{done,total}} (담당환자 기준)
     var missingList = []; // {p, cat, missing:[{group,name}]}
 
     S.patients.forEach(function(p){
-      var hasNurse = !!p.nurse;
-      var target = hasNurse ? overall : unassigned;
-      if(hasNurse && !byNurse[p.nurse]){ byNurse[p.nurse]={}; CATS.forEach(function(c){ byNurse[p.nurse][c]={done:0,total:0}; }); }
+      var assigned = isAssignedPatient(p);
+      var target = assigned ? overall : unassigned;
+      if(assigned && !byNurse[p.nurse]){ byNurse[p.nurse]={}; CATS.forEach(function(c){ byNurse[p.nurse][c]={done:0,total:0}; }); }
       (p.categories||[]).forEach(function(cat){
         if(!patientCategoryVisitedThisMonth(p, cat, mkey)) return; // 그 구분으로 이번달 방문이 없으면 집계 제외
         var status = computeCategoryStatus(p, cat, mkey);
         if(!status) return; // 시작 전
         target[cat].total++;
-        if(hasNurse) byNurse[p.nurse][cat].total++;
+        if(assigned) byNurse[p.nurse][cat].total++;
         if(status.satisfied){
           target[cat].done++;
-          if(hasNurse) byNurse[p.nurse][cat].done++;
+          if(assigned) byNurse[p.nurse][cat].done++;
         } else {
           missingList.push({ p:p, cat:cat, missing:status.missing });
         }
@@ -3461,23 +3366,44 @@
     return (S.visitsCache[mkey] || []).some(function(v){ return String(v.no) === String(p.no); });
   }
 
-  // "비담당환자"에 해당하는 이번달 방문자 전체: (1) 등록은 되어 있는데 담당간호사가 없는 환자,
-  // (2) 환자배정에 아예 등록되지 않은 대상자(가상환자) 둘 다 포함해야 합니다. 등록번호 기준으로 중복 제거.
-  function getUnassignedPatientsThisMonth(mkey){
+  // "고정환자": 고정방문 주기(freq)가 해당없음/미정(확인필요)/미방문이 아닌, 실제 주기가 정해진 환자.
+  // "담당환자": 고정환자이면서 담당간호사도 지정된 환자. 그 외 전부는 "비담당환자"입니다.
+  function isPatientFixed(p){
+    return !!p.freq && NON_FIXED_FREQS.indexOf(p.freq) === -1;
+  }
+  function isAssignedPatient(p){
+    return isPatientFixed(p) && !!p.nurse;
+  }
+
+  // "비담당환자"를 두 그룹으로 나눠서 반환합니다.
+  // - nonFixed(비고정): 고정환자가 아니거나(또는 담당간호사가 없어서) 그 누구의 "담당환자"도 아닌 채로 방문한 경우
+  // - proxy(대리방문): 다른 간호사의 담당환자인데, 그 담당간호사가 아닌 다른 간호사가 방문한 경우
+  // 특정 간호사 탭에서는 그 간호사가 실제 방문한 기록만 대상으로 합니다.
+  function getUnassignedBreakdownThisMonth(mkey){
     var list = S.visitsCache[mkey] || [];
     var isSpecificNurse = (S.who !== "전체" && S.who !== DOCTOR_NAME);
-    var seen = {};
-    var result = [];
+    var seenNonFixed = {}, seenProxy = {};
+    var nonFixed = [], proxy = [];
+
     list.forEach(function(v){
-      if(!v.no || seen[v.no]) return;
-      if(isSpecificNurse && v.nurse !== S.who) return; // 특정 간호사 탭에서는 그 간호사가 실제 방문한 경우만
+      if(!v.no) return;
+      if(isSpecificNurse && v.nurse !== S.who) return;
+
       var registered = S.patients.find(function(p){ return String(p.no) === String(v.no); });
+
+      if(registered && isAssignedPatient(registered)){
+        if(registered.nurse !== v.nurse && !seenProxy[v.no]){
+          seenProxy[v.no] = true;
+          proxy.push(registered);
+        }
+        return; // 담당간호사 본인이 방문한 건 정상 담당환자이므로 두 버킷 모두 해당 없음
+      }
+
+      if(seenNonFixed[v.no]) return;
+      seenNonFixed[v.no] = true;
       if(registered){
-        if(registered.nurse) return; // 담당간호사가 있으면 비담당이 아님
-        seen[v.no] = true;
-        result.push(registered);
+        nonFixed.push(registered);
       } else {
-        seen[v.no] = true;
         var catsForNo = {};
         list.forEach(function(v2){
           if(String(v2.no) !== String(v.no)) return;
@@ -3486,20 +3412,21 @@
         var categories = Object.keys(catsForNo);
         var startMonths = {};
         categories.forEach(function(c){ startMonths[c] = mkey; });
-        result.push({ id:"virtual_"+v.no, no:v.no, name:v.name, nurse:"", categories:categories, startMonths:startMonths, isVirtual:true });
+        nonFixed.push({ id:"virtual_"+v.no, no:v.no, name:v.name, nurse:"", categories:categories, startMonths:startMonths, isVirtual:true });
       }
     });
-    return result;
+
+    return { nonFixed:nonFixed, proxy:proxy };
   }
 
   function renderDashboard(){
     var mkey = monthKey(S.year, S.month);
     var stats = buildCompletionStats(mkey);
 
-    // "담당환자"는 고정환자(담당간호사가 지정된 환자) 중, 이번달에 실제로 방문한 사람만 셉니다.
+    // "담당환자" = 고정환자(고정방문 주기가 정해짐) + 담당간호사 지정, 이번달에 실제로 방문한 사람만 셉니다.
     var visibleCount = (S.who === "전체")
-      ? S.patients.filter(function(p){ return !!p.nurse && patientHasAnyVisitThisMonth(p, mkey); }).length
-      : getNurseFilteredPatients().filter(function(p){ return patientHasAnyVisitThisMonth(p, mkey); }).length;
+      ? S.patients.filter(function(p){ return isAssignedPatient(p) && patientHasAnyVisitThisMonth(p, mkey); }).length
+      : getNurseFilteredPatients().filter(function(p){ return isAssignedPatient(p) && patientHasAnyVisitThisMonth(p, mkey); }).length;
     var scoped = (S.who === "전체") ? stats.overall : (stats.byNurse[S.who] || {});
 
     document.getElementById("statPatients").textContent = visibleCount;
@@ -3511,11 +3438,12 @@
       document.getElementById(elId).title = hasMulti ? "이번달 "+c+" 방문이 2회 이상인 환자가 있습니다. 눌러서 상황판에서 확인하세요." : "";
     });
 
-    // 우측: 비담당환자(담당간호사 미지정 + 환자배정 미등록 대상자 포함) 중 이번달에 실제로 방문한 사람.
-    var unassignedPatients = getUnassignedPatientsThisMonth(mkey);
-    document.getElementById("statUnassigned").textContent = unassignedPatients.length;
+    // 우측: 비담당환자(담당환자가 아닌 모든 환자 = 비고정 + 대리방문) 중 이번달에 실제로 방문한 사람.
+    var breakdown = getUnassignedBreakdownThisMonth(mkey);
+    var unassignedAll = breakdown.nonFixed.concat(breakdown.proxy);
+    document.getElementById("statUnassigned").textContent = unassignedAll.length;
     var uvDone = 0, uvTotal = 0;
-    unassignedPatients.forEach(function(p){
+    unassignedAll.forEach(function(p){
       if((p.categories||[]).indexOf("일방시") === -1) return;
       if(!patientCategoryVisitedThisMonth(p, "일방시", mkey)) return;
       var status = computeCategoryStatus(p, "일방시", mkey);
@@ -4030,14 +3958,16 @@
     }
 
     var isSpecificNurse = (S.who !== "전체" && S.who !== DOCTOR_NAME);
-    var topAssigned = topList.filter(function(p){ return isSpecificNurse ? (p.nurse === S.who) : !!p.nurse; });
-    var topUnassignedReal = topList.filter(function(p){ return !p.nurse; });
-    var orphanVisits = getOrphanVisitsThisMonth(mkey);
+    var topAssigned = topList.filter(function(p){ return isSpecificNurse ? (isPatientFixed(p) && p.nurse === S.who) : isAssignedPatient(p); });
+
+    var breakdown = getUnassignedBreakdownThisMonth(mkey);
+    var nonFixedList = breakdown.nonFixed, proxyList = breakdown.proxy;
     if(S.checklistTopSearch){
-      orphanVisits = orphanVisits.filter(function(o){ return (o.name||"").indexOf(S.checklistTopSearch) !== -1; });
+      nonFixedList = nonFixedList.filter(function(o){ return (o.name||"").indexOf(S.checklistTopSearch) !== -1; });
+      proxyList = proxyList.filter(function(o){ return (o.name||"").indexOf(S.checklistTopSearch) !== -1; });
     }
-    var totalTopCount = topList.length + orphanVisits.length;
-    var totalUnassignedCount = topUnassignedReal.length + orphanVisits.length;
+    var totalUnassignedCount = nonFixedList.length + proxyList.length;
+    var totalTopCount = topAssigned.length + totalUnassignedCount;
 
     var html = '<div class="checklist-section-header section-visited">' +
         '<span>● 이번달 방문목록에 있음 (' + totalTopCount + '명)</span>' +
@@ -4058,12 +3988,14 @@
         '</div>' +
         '<div class="checklist-col col-unassigned">' +
           '<div class="checklist-subsection-header sub-unassigned">비담당환자방문 · ' + totalUnassignedCount + '명</div>' +
-          (totalUnassignedCount
-            ? '<div class="patient-list-group">'+
-                topUnassignedReal.map(function(p){ return renderOnePatientCard(p, mkey, false); }).join("") +
-                orphanVisits.map(function(o){ return renderOnePatientCard(o, mkey, false); }).join("") +
-              '</div>'
-            : '<div class="empty-note" style="padding:8px 4px;">해당 없음</div>') +
+          '<div style="font-size:11px;color:var(--ink-soft);font-weight:600;margin:4px 2px 2px;">비고정 · ' + nonFixedList.length + '명</div>' +
+          (nonFixedList.length
+            ? '<div class="patient-list-group">'+nonFixedList.map(function(p){ return renderOnePatientCard(p, mkey, false); }).join("")+'</div>'
+            : '<div class="empty-note" style="padding:6px 4px;">해당 없음</div>') +
+          '<div style="font-size:11px;color:var(--ink-soft);font-weight:600;margin:10px 2px 2px;">대리방문 · ' + proxyList.length + '명</div>' +
+          (proxyList.length
+            ? '<div class="patient-list-group">'+proxyList.map(function(p){ return renderOnePatientCard(p, mkey, false); }).join("")+'</div>'
+            : '<div class="empty-note" style="padding:6px 4px;">해당 없음</div>') +
         '</div>' +
       '</div>';
     } else {
@@ -4625,21 +4557,38 @@
   }
 
   /* ================= 환자 등록 / 수정 모달 ================= */
-  function openAddPatientModal(editId, prefill){
-    var editing = null;
-    if(editId){ editing = S.patients.find(function(x){ return x.id===editId; }); }
+  // 환자배정 관리와 대상자목록, 양쪽에서 공유하는 단일 정보수정 화면입니다.
+  // no(환자번호)로 대상자(candidate)/환자(patient) 레코드를 함께 찾아서 보여주고, 저장하면 두 레코드 모두 갱신합니다.
+  function openAddPatientModal(no, prefill){
+    var patient = no ? S.patients.find(function(x){ return x.no === no; }) : null;
+    var candidate = no ? S.candidates.find(function(x){ return x.no === no; }) : null;
+    var editing = !!(patient || candidate);
+
     var prefillNo = (!editing && prefill && prefill.no) ? prefill.no : "";
     var prefillName = (!editing && prefill && prefill.name) ? prefill.name : "";
 
-    var isUnassigned = editing ? !editing.nurse : true;
+    var curNo = editing ? no : prefillNo;
+    var curName = patient ? patient.name : (candidate ? candidate.name : prefillName);
+    var curNurse = patient ? (patient.nurse || "") : (candidate ? (candidate.nurse || "") : "");
+    var curFreq = candidate ? (candidate.freq || "해당없음") : (patient ? (patient.freq || "해당없음") : "해당없음");
+    var curRegDate = patient ? (patient.registeredDate || "") : (candidate ? (candidate.registeredDate || "") : "");
+    var curLocation = patient ? (patient.location || "") : (candidate ? (candidate.location || "") : "");
+    var curCategories = patient ? (patient.categories || []) : (candidate ? (candidate.types || []).filter(function(t){ return t !== "보류"; }) : []);
+    var curStartMonths = patient ? (patient.startMonths || {}) : {};
+
+    var isUnassigned = !curNurse;
     var staffOptions = '<option value=""'+(isUnassigned?' selected':'')+'>미배정</option>' + S.staff.map(function(n){
-      return '<option value="'+escapeHtml(n)+'" '+((editing&&editing.nurse===n)?'selected':'')+'>'+escapeHtml(n)+'</option>';
+      return '<option value="'+escapeHtml(n)+'" '+(curNurse===n?'selected':'')+'>'+escapeHtml(n)+'</option>';
+    }).join("");
+
+    var freqOptions = CANDIDATE_FREQS.map(function(f){
+      return '<option value="'+f+'" '+(curFreq===f?"selected":"")+'>'+f+'</option>';
     }).join("");
 
     var defaultMonth = monthKey(S.year, S.month);
     var catRows = CATS.map(function(c){
-      var checked = editing ? (editing.categories.indexOf(c)!==-1) : false;
-      var startVal = (editing && editing.startMonths && editing.startMonths[c]) ? editing.startMonths[c] : defaultMonth;
+      var checked = curCategories.indexOf(c) !== -1;
+      var startVal = curStartMonths[c] || defaultMonth;
       return '<div class="cat-config-row">' +
         '<label><input type="checkbox" name="cat" value="'+c+'" data-role="catchk" '+(checked?'checked':'')+'> '+c+'</label>' +
         '<input type="month" class="cat-start" data-cat="'+c+'" value="'+startVal+'" '+(checked?'':'disabled')+'>' +
@@ -4648,16 +4597,21 @@
 
     openModal(
       '<h3>'+(editing?'환자 정보 수정':'새 환자 등록')+'</h3>' +
-      '<div class="field"><label>환자번호</label><input type="text" id="fNo" value="'+(editing?escapeHtml(editing.no):escapeHtml(prefillNo))+'" placeholder="예: 78"></div>' +
-      '<div class="field"><label>이름</label><input type="text" id="fName" value="'+(editing?escapeHtml(editing.name):escapeHtml(prefillName))+'" placeholder="예: 최옥희"></div>' +
+      '<div class="field"><label>환자번호</label><input type="text" id="fNo" value="'+escapeHtml(curNo)+'" placeholder="예: 78"></div>' +
+      '<div class="field"><label>이름</label><input type="text" id="fName" value="'+escapeHtml(curName)+'" placeholder="예: 최옥희"></div>' +
       '<div class="field"><label>시범사업 구분 · 첫 방문달 (복수 선택 가능)</label>' +
         '<p style="font-size:11.5px;color:var(--ink-soft);margin:-2px 0 6px;">첫 방문달을 기준으로 이후 달의 필수항목이 자동으로 바뀝니다.</p>' +
         catRows +
       '</div>' +
+      '<div class="field"><label>고정방문</label><select id="fFreq">'+freqOptions+'</select></div>' +
+      '<div class="field"><label>등록날짜 (선택)</label><input type="date" id="fRegDate" value="'+escapeHtml(curRegDate)+'">' +
+        '<p style="font-size:11.5px;color:var(--ink-soft);margin-top:4px;">등록날짜를 정하면, 체크리스트 탭에서 그 달부터 이 환자가 표시됩니다.</p>' +
+      '</div>' +
       '<div class="field"><label>담당 간호사</label><select id="fNurse">'+staffOptions+'<option value="__add__">+ 새 이름 추가</option></select></div>' +
-      '<div class="field"><label>위치 (거주지역/시설명, 선택)</label><input type="text" id="fLocation" value="'+(editing?escapeHtml(editing.location||""):"")+'" placeholder="예: 남산타운"></div>' +
+      '<div class="field"><label>위치 (거주지역/시설명, 선택)</label><input type="text" id="fLocation" value="'+escapeHtml(curLocation)+'" placeholder="예: 남산타운"></div>' +
       '<div class="modal-actions">' +
         '<button class="btn" id="pCancel">취소</button>' +
+        (editing ? '<button class="btn" style="color:var(--warn);border-color:var(--warn);" id="pDelete">삭제</button>' : '') +
         '<button class="btn btn-teal" id="pSave">'+(editing?'저장':'등록')+'</button>' +
       '</div>'
     );
@@ -4682,19 +4636,42 @@
           sel.insertBefore(opt, sel.querySelector('option[value="__add__"]'));
           sel.value = name;
         } else {
-          sel.value = (editing && editing.nurse) ? editing.nurse : (S.staff[0] || "");
+          sel.value = curNurse || "";
         }
       }
     });
 
     document.getElementById("pCancel").onclick = closeModal;
+    if(editing){
+      document.getElementById("pDelete").onclick = async function(){
+        var ok = await showConfirm(curName + " 님을 삭제하시겠습니까? 대상자·환자배정·체크 기록이 모두 삭제됩니다.");
+        if(!ok) return;
+        if(patient){
+          S.patients = S.patients.filter(function(x){ return x.id !== patient.id; });
+          delete S.patientStates[patient.id];
+          await saveAllPatientStates();
+          await storageSet(K_PATIENTS, S.patients, true);
+        }
+        if(candidate){
+          S.candidates = S.candidates.filter(function(x){ return x.id !== candidate.id; });
+          await storageSet(K_CANDIDATES, S.candidates, true);
+        }
+        closeModal();
+        showToast("삭제되었습니다.");
+        renderAll();
+      };
+    }
+
     document.getElementById("pSave").onclick = async function(){
       var saveBtn = document.getElementById("pSave");
       if(saveBtn.disabled) return; // 저장 처리 중 중복 클릭 방지
-      var no = document.getElementById("fNo").value.trim();
+      var newNo = document.getElementById("fNo").value.trim();
       var name = document.getElementById("fName").value.trim();
-      var nurse = document.getElementById("fNurse").value;
+      var nurseVal = document.getElementById("fNurse").value;
+      if(nurseVal === "__add__") nurseVal = "";
       var location = document.getElementById("fLocation").value.trim();
+      var freq = document.getElementById("fFreq").value;
+      var regDate = document.getElementById("fRegDate").value;
       var cats = Array.prototype.slice.call(document.querySelectorAll('input[name="cat"]:checked')).map(function(c){ return c.value; });
       var startMonths = {};
       document.querySelectorAll(".cat-start").forEach(function(inp){
@@ -4704,38 +4681,59 @@
       if(!name){ showToast("이름을 입력해주세요."); return; }
       if(cats.length===0){ showToast("시범사업 구분을 한 개 이상 선택해주세요."); return; }
 
-      // 환자번호는 이제 내부 ID로도 쓰이므로, 번호 하나당 환자 한 명만 존재해야 합니다.
+      // 환자번호는 내부 ID로도 쓰이므로, 번호 하나당 환자 한 명만 존재해야 합니다.
       var dup = S.patients.find(function(x){
-        return x.id !== (editing?editing.id:null) && no && (x.no||"") === no;
+        return x.id !== (patient?patient.id:null) && newNo && (x.no||"") === newNo;
       });
       if(dup){
-        showToast("환자번호 "+no+"번은 이미 "+dup.name+" 님으로 등록되어 있습니다.");
+        showToast("환자번호 "+newNo+"번은 이미 "+dup.name+" 님으로 등록되어 있습니다.");
         return;
       }
 
       saveBtn.disabled = true;
       saveBtn.textContent = editing ? "저장 중..." : "등록 중...";
 
-      if(editing){
-        editing.no = no; editing.name = name; editing.nurse = nurse; editing.categories = cats; editing.startMonths = startMonths; editing.location = location;
+      // 1) 대상자(candidate) 레코드 upsert
+      var candTarget = candidate;
+      if(!candTarget){
+        candTarget = { id: uid("c"), no:newNo, name:name, types:cats.slice(), freq:freq, nurse:nurseVal, registeredDate:regDate, location:location, createdAt: todayStr() };
+        S.candidates.push(candTarget);
       } else {
-        // 환자번호(no)를 그대로 내부 ID로 사용합니다 (번호가 비어있는 예외적인 경우에만 임시 ID 생성).
-        var newId = no || uid("p");
-        var p = { id: newId, no:no, name:name, nurse:nurse, categories:cats, startMonths:startMonths, location:location, createdAt: todayStr() };
-        S.patients.push(p);
-        // 정식 등록 전, "환자배정 미등록" 상태로 미리 체크해둔 기록이 있으면 그대로 이어받습니다.
-        var virtualId = "virtual_" + no;
-        if(no && S.patientStates[virtualId]){
+        candTarget.no = newNo; candTarget.name = name; candTarget.freq = freq; candTarget.nurse = nurseVal;
+        candTarget.registeredDate = regDate; candTarget.location = location;
+        // 후보의 "구분(types)"에는 보류 여부도 들어가므로, 보류만 있던 값은 유지하고 실제 구분만 갱신
+        var keepHold = (candTarget.types||[]).indexOf("보류")!==-1 ? ["보류"] : [];
+        candTarget.types = cats.slice().concat(keepHold.filter(function(t){ return cats.indexOf(t)===-1; }));
+      }
+      await storageSet(K_CANDIDATES, S.candidates, true);
+
+      // 2) 환자(patient) 레코드: 이미 있으면 그대로 갱신, 없고 조건(간호사+고정방문) 충족시 새로 생성
+      var isFixed = NON_FIXED_FREQS.indexOf(freq) === -1;
+      if(patient){
+        patient.no = newNo; patient.name = name; patient.nurse = nurseVal; patient.categories = cats;
+        patient.startMonths = startMonths; patient.location = location; patient.freq = freq;
+        await storageSet(K_PATIENTS, S.patients, true);
+        candTarget.linkedPatientId = patient.id;
+        await storageSet(K_CANDIDATES, S.candidates, true);
+      } else if(nurseVal && isFixed){
+        var newId = newNo || uid("p");
+        var newP = { id:newId, no:newNo, name:name, nurse:nurseVal, freq:freq, categories:cats, startMonths:startMonths, location:location, createdAt: todayStr() };
+        S.patients.push(newP);
+        var virtualId = "virtual_" + newNo;
+        if(newNo && S.patientStates[virtualId]){
           S.patientStates[newId] = S.patientStates[virtualId];
           delete S.patientStates[virtualId];
         } else if(!S.patientStates[newId]){
           S.patientStates[newId] = { items:{} };
         }
         await saveAllPatientStates();
+        await storageSet(K_PATIENTS, S.patients, true);
+        candTarget.linkedPatientId = newId;
+        await storageSet(K_CANDIDATES, S.candidates, true);
       }
-      await storageSet(K_PATIENTS, S.patients, true);
+
       closeModal();
-      showToast(editing ? "수정되었습니다." : "등록되었습니다.");
+      showToast(editing ? "저장되었습니다." : "등록되었습니다.");
       renderAll();
     };
   }
