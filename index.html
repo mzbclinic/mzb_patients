@@ -1154,6 +1154,10 @@
     //  정식 등록 후에도 번호만 같으면 자동으로 이어집니다.)
     await migratePatientIdsToNo();
 
+    // "고정방문(freq)" 필드는 나중에 추가되어서, 그 전에 등록된 환자들은 이 값이 없어 담당환자 판정에서
+    // 누락됩니다. 담당간호사가 있던 환자는 계속 담당환자로 인정되도록 한 번만 보정합니다.
+    await migratePatientFreqBackfill();
+
     // 1회성 마이그레이션들 (동의서 필수화, 김혜경 임포트, 대상자 백필, 전체명단 임포트, 등록날짜 갱신)
     // 예전에는 이 5개의 완료여부를 매번 각각 확인했지만, 이제 통합 플래그 1개로 한 번만 확인합니다.
     // (이미 다 완료된 상태라면 이 블록 전체가 통째로 건너뛰어집니다.)
@@ -1269,6 +1273,34 @@
       await storageSet(K_PATIENTS, S.patients, true);
       await storageSet(K_CANDIDATES, S.candidates, true);
       await saveAllPatientStates();
+    }
+    await storageSet(flagKey, true, true);
+  }
+
+  // "고정방문(freq)"은 나중에 추가된 필드라, 그 전에 이미 등록되어 있던 환자들은 이 값이 아예 없습니다.
+  // freq가 없으면 "고정환자"로 인정이 안 되어(담당간호사가 있어도) 전부 "비담당환자"로 잘못 보이는
+  // 문제가 있어서, 연결된 대상자(candidate)의 freq를 가져오거나, 그마저 없으면 "매달"로 채워
+  // 기존에 담당간호사가 지정되어 있던 환자는 계속 담당환자로 인정되도록 한 번만 보정합니다.
+  async function migratePatientFreqBackfill(){
+    var flagKey = "migration-patient-freq-backfill";
+    var already = await storageGet(flagKey, true);
+    if(already) return;
+
+    var changed = false;
+    S.patients.forEach(function(p){
+      if(p.freq) return; // 이미 값이 있으면(비고정으로 명시된 경우 포함) 손대지 않음
+      if(!p.nurse) return; // 담당간호사가 없었다면 원래도 비담당이었으므로 그대로 둠
+      var cand = S.candidates.find(function(c){ return c.no === p.no; });
+      if(cand && cand.freq && NON_FIXED_FREQS.indexOf(cand.freq) === -1){
+        p.freq = cand.freq;
+      } else {
+        p.freq = "매달"; // 근거자료가 없으면 기존처럼 "고정환자"로 인정되도록 안전한 기본값
+      }
+      changed = true;
+    });
+
+    if(changed){
+      await storageSet(K_PATIENTS, S.patients, true);
     }
     await storageSet(flagKey, true, true);
   }
@@ -1768,6 +1800,8 @@
     }
     rows.sort(function(a,b){
       var na = a.patient.nurse || "", nb = b.patient.nurse || "";
+      if(!na && nb) return 1;  // 미배정은 뒤로
+      if(na && !nb) return -1;
       if(na !== nb) return na.localeCompare(nb, "ko");
       return (a.patient.name||"").localeCompare(b.patient.name||"", "ko");
     });
