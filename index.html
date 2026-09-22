@@ -2124,7 +2124,7 @@
           if((p.nurse||"") !== nurseVal) return false;
         }
         if(!rowTextMatches(p.location, tf.location)) return false;
-        if(tf.cat && (p.categories||[]).indexOf(tf.cat) === -1) return false;
+        if(tf.cat && tf.cat.length && !tf.cat.some(function(c){ return (p.categories||[]).indexOf(c) !== -1; })) return false;
         return true;
       })
       .forEach(function(p){
@@ -2171,6 +2171,19 @@
     return { overall:overall, byNurse:byNurse };
   }
 
+  // "담당환자"로 집계된 환자인데, 연결된 대상자(candidate) 기록이 없거나 그 대상자의 고정방문이
+  // 비고정으로 되어있는 경우를 찾습니다. 이런 환자는 예전에 담당간호사가 지정되어 있었지만
+  // 대상자 기록과 제대로 안 맞아서, 안전하게 "고정환자"로 간주된 채 남아있는 경우일 수 있습니다.
+  function getFreqMismatchPatients(){
+    return S.patients.filter(function(p){
+      if(!isAssignedPatient(p)) return false;
+      var cand = S.candidates.find(function(c){ return c.no === p.no; });
+      if(!cand) return true;
+      if(!isFixedVisitCandidate(cand)) return true;
+      return false;
+    });
+  }
+
   function buildAssignmentStatsHtml(){
     var stats = buildAssignmentStats();
     var nurseOrder = Object.keys(VISIT_NURSE_COLOR_MAP); // 정규직(김혜경,전송이)이 먼저, 프리랜서(안혜리)가 나중에 오는 고정 순서
@@ -2209,6 +2222,15 @@
       });
     }
     html += '</tbody></table></div>';
+
+    var mismatches = getFreqMismatchPatients();
+    if(mismatches.length > 0){
+      html += '<div style="background:var(--warn-soft);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--warn);">' +
+        '⚠ 담당간호사는 지정되어 있지만, 고정방문이 \'해당없음/미정(확인필요)/미방문\'이거나 대상자 기록 자체가 없는 환자 '+mismatches.length+'명: ' +
+        mismatches.map(function(p){ return escapeHtml(p.name)+'(#'+escapeHtml(p.no||"")+')'; }).join(", ") +
+        '. [대상자목록] 탭에서 환자 정보를 확인해주세요.' +
+      '</div>';
+    }
     return html;
   }
 
@@ -2234,7 +2256,7 @@
       { key:"no", type:"text" },
       { key:"name", type:"text" },
       { key:"nurse", type:"select", options: [{value:"__unassigned__",label:"미배정"}].concat(S.staff.map(function(n){ return {value:n,label:n}; })) },
-      { key:"cat", type:"select", options: CATS.map(function(c){ return {value:c,label:c}; }) },
+      { key:"cat", type:"multiselect", options: CATS.map(function(c){ return {value:c,label:c}; }) },
       { key:"startMonth", type:"month" },
       { key:"location", type:"text" },
       { key:"_actions", type:"none" }
@@ -2395,11 +2417,13 @@
     list = list.filter(function(c){
       if(!rowTextMatches(c.no, tf.no)) return false;
       if(!rowTextMatches(c.name, tf.name)) return false;
-      if(tf.type){
+      if(tf.type && tf.type.length){
         var types = (c.types && c.types.length) ? c.types : ["미지정"];
-        if(types.indexOf(tf.type) === -1) return false;
+        if(!tf.type.some(function(t){ return types.indexOf(t) !== -1; })) return false;
       }
-      if(!rowSelectMatches(c.freq || "해당없음", tf.freq)) return false;
+      if(tf.freq && tf.freq.length){
+        if(tf.freq.indexOf(c.freq || "해당없음") === -1) return false;
+      }
       if(!rowMonthMatches(c.registeredDate, tf.registeredDate)) return false;
       if(tf.nurse){
         var nurseVal = tf.nurse === "__unassigned__" ? "" : tf.nurse;
@@ -2465,8 +2489,8 @@
     buildFilterHeaderRow("candidates", [
       { key:"no", type:"text" },
       { key:"name", type:"text" },
-      { key:"type", type:"select", options: CANDIDATE_TYPES.concat(["미지정"]).map(function(t){ return {value:t,label:t}; }) },
-      { key:"freq", type:"select", options: CANDIDATE_FREQS.map(function(f){ return {value:f,label:f}; }) },
+      { key:"type", type:"multiselect", options: CANDIDATE_TYPES.concat(["미지정"]).map(function(t){ return {value:t,label:t}; }) },
+      { key:"freq", type:"multiselect", options: CANDIDATE_FREQS.map(function(f){ return {value:f,label:f}; }) },
       { key:"registeredDate", type:"month" },
       { key:"nurse", type:"select", options: [{value:"__unassigned__",label:"미배정"}].concat(S.staff.map(function(n){ return {value:n,label:n}; })) },
       { key:"_actions", type:"none" }
@@ -5225,6 +5249,37 @@
     origRenderAll();
     renderAdminEntry();
   };
+
+  // 데이터를 저장/수정한 뒤 다시 그리면서 표(.assign-table-wrap)나 페이지 전체의 스크롤 위치가
+  // 맨 위로 리셋되는 문제를 막기 위한 공용 래퍼입니다. renderAll뿐 아니라, renderAll을 거치지
+  // 않고 곧바로 호출되는 개별 화면 렌더 함수들에도 똑같이 적용해서, 어느 경로로 다시 그리든
+  // 다시 그리기 직전의 스크롤 위치가 그대로 복원되게 합니다.
+  function withScrollPreserved(fn){
+    return function(){
+      var winX = window.scrollX, winY = window.scrollY;
+      var wraps = Array.prototype.slice.call(document.querySelectorAll(".assign-table-wrap"));
+      var wrapScrolls = wraps.map(function(w){ return w.scrollTop; });
+
+      var result = fn.apply(this, arguments);
+
+      requestAnimationFrame(function(){
+        window.scrollTo(winX, winY);
+        var newWraps = document.querySelectorAll(".assign-table-wrap");
+        for(var i = 0; i < newWraps.length && i < wrapScrolls.length; i++){
+          newWraps[i].scrollTop = wrapScrolls[i];
+        }
+      });
+      return result;
+    };
+  }
+  renderAll = withScrollPreserved(renderAll);
+  renderVisitsView = withScrollPreserved(renderVisitsView);
+  renderBloodTestView = withScrollPreserved(renderBloodTestView);
+  renderSocialWorkerView = withScrollPreserved(renderSocialWorkerView);
+  renderAssignmentView = withScrollPreserved(renderAssignmentView);
+  renderCandidateView = withScrollPreserved(renderCandidateView);
+  renderPatientList = withScrollPreserved(renderPatientList);
+  renderDashboard = withScrollPreserved(renderDashboard);
 
   function renderAdminEntry(){
     var existing = document.getElementById("adminEntryBar");
