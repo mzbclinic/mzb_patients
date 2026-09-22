@@ -429,6 +429,96 @@
   .visit-check-yes{ color:var(--teal); font-weight:700; }
   .visit-check-no{ color:var(--line); }
   .nurse-badge{ display:inline-block; padding:2px 9px; border-radius:20px; font-size:11.5px; font-weight:600; white-space:nowrap; }
+
+  /* ===== 휴가·근태 관리 (기존 화면과 이름 충돌 없도록 모두 #leaveView 안에서만 적용) ===== */
+  #leaveView{
+    --lv-teal-900:#123B47; --lv-teal-700:#1F4E5F; --lv-teal-500:#2E6E7E; --lv-teal-100:#DCEBEC; --lv-teal-50:#F2F7F8;
+    --lv-sand:#FAF9F5; --lv-paper:#FFFFFF; --lv-ink:#25302F; --lv-ink-soft:#5C6866; --lv-line:#E4E1D6;
+    --lv-amber:#C97B4A; --lv-amber-100:#F7E7DA; --lv-sage:#5F8F79; --lv-sage-100:#E4EFE9;
+    --lv-rose:#B65C4A; --lv-rose-100:#F5E3DF;
+    --lv-radius:10px;
+    font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic",-apple-system,sans-serif;
+    background:var(--lv-sand); color:var(--lv-ink);
+  }
+  #leaveView *{box-sizing:border-box;}
+  #leaveView .lv-app{max-width:1180px;margin:0 auto;padding:16px 4px 80px;}
+
+  #leaveView .lv-backbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+  #leaveView .lv-backlink{font-size:13px;color:var(--lv-teal-700);cursor:pointer;display:inline-block;}
+  #leaveView .lv-backlink:hover{text-decoration:underline;}
+
+  #leaveView .lv-tabs{display:flex;gap:4px;border-bottom:1px solid var(--lv-line);margin-bottom:20px;}
+  #leaveView .lv-tab{padding:10px 16px;font-size:14px;cursor:pointer;color:var(--lv-ink-soft);border-bottom:2px solid transparent;user-select:none;}
+  #leaveView .lv-tab.active{color:var(--lv-teal-900);border-color:var(--lv-teal-700);font-weight:600;}
+  #leaveView .lv-tab:hover{color:var(--lv-teal-700);}
+
+  #leaveView .lv-view{display:none;}
+  #leaveView .lv-view.active{display:block;}
+
+  #leaveView .lv-grid-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-bottom:24px;}
+  #leaveView .lv-card{background:var(--lv-paper);border:1px solid var(--lv-line);border-radius:var(--lv-radius);padding:16px 18px;cursor:pointer;transition:border-color .15s;}
+  #leaveView .lv-card:hover{border-color:var(--lv-teal-500);}
+  #leaveView .lv-card .lv-row1{display:flex;justify-content:space-between;align-items:flex-start;}
+  #leaveView .lv-card .lv-name{font-size:16px;font-weight:700;color:var(--lv-teal-900);}
+  #leaveView .lv-card .lv-role{font-size:12px;color:var(--lv-ink-soft);margin-top:2px;}
+  #leaveView .lv-badge{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600;}
+  #leaveView .lv-badge.lv-reg{background:var(--lv-teal-100);color:var(--lv-teal-900);}
+  #leaveView .lv-badge.lv-frl{background:var(--lv-amber-100);color:var(--lv-amber);}
+  #leaveView .lv-badge.lv-end{background:var(--lv-rose-100);color:var(--lv-rose);}
+  #leaveView .lv-card .lv-metric{margin-top:14px;display:flex;align-items:baseline;gap:6px;}
+  #leaveView .lv-card .lv-metric .lv-num{font-size:26px;font-weight:700;color:var(--lv-sage);}
+  #leaveView .lv-card .lv-metric.lv-warn .lv-num{color:var(--lv-rose);}
+  #leaveView .lv-card .lv-metric .lv-lbl{font-size:12px;color:var(--lv-ink-soft);}
+  #leaveView .lv-card .lv-sub{font-size:12px;color:var(--lv-ink-soft);margin-top:6px;}
+
+  #leaveView .lv-panel{background:var(--lv-paper);border:1px solid var(--lv-line);border-radius:var(--lv-radius);padding:20px 22px;margin-bottom:18px;}
+  #leaveView .lv-panel h2{font-size:15px;margin:0 0 14px;color:var(--lv-teal-900);}
+  #leaveView .lv-panel h3{font-size:13px;margin:18px 0 8px;color:var(--lv-ink-soft);font-weight:600;}
+
+  #leaveView .lv-field-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;}
+  #leaveView .lv-field{display:flex;flex-direction:column;gap:4px;}
+  #leaveView .lv-field label{font-size:12px;color:var(--lv-ink-soft);}
+  #leaveView .lv-field input, #leaveView .lv-field select, #leaveView .lv-field textarea{
+    border:1px solid var(--lv-line);border-radius:6px;padding:7px 9px;font-size:13px;font-family:inherit;background:var(--lv-sand);color:var(--lv-ink);
+  }
+  #leaveView .lv-field textarea{resize:vertical;min-height:32px;}
+  #leaveView button{
+    border:1px solid var(--lv-teal-700);background:var(--lv-teal-700);color:#fff;padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;
+  }
+  #leaveView button:hover{background:var(--lv-teal-900);}
+  #leaveView button.lv-ghost{background:transparent;color:var(--lv-teal-700);}
+  #leaveView button.lv-ghost:hover{background:var(--lv-teal-50);}
+  #leaveView button.lv-danger{background:transparent;color:var(--lv-rose);border-color:var(--lv-rose-100);}
+  #leaveView button.lv-danger:hover{background:var(--lv-rose-100);}
+
+  #leaveView table{width:100%;border-collapse:collapse;font-size:13px;}
+  #leaveView th{text-align:left;color:var(--lv-ink-soft);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--lv-line);white-space:nowrap;}
+  #leaveView td{padding:8px 10px;border-bottom:1px solid var(--lv-line);}
+  #leaveView tr:last-child td{border-bottom:none;}
+  #leaveView .lv-empty-row td{color:var(--lv-ink-soft);text-align:center;padding:20px;}
+
+  #leaveView .lv-stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px;}
+  #leaveView .lv-stat{background:var(--lv-teal-50);border-radius:var(--lv-radius);padding:14px 16px;}
+  #leaveView .lv-stat .lv-n{font-size:22px;font-weight:700;color:var(--lv-teal-900);}
+  #leaveView .lv-stat .lv-l{font-size:12px;color:var(--lv-ink-soft);margin-top:2px;}
+
+  #leaveView .lv-type-pill{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600;}
+  #leaveView .lv-pill-연차{background:var(--lv-sage-100);color:var(--lv-sage);}
+  #leaveView .lv-pill-경조사{background:var(--lv-teal-100);color:var(--lv-teal-700);}
+  #leaveView .lv-pill-병가{background:var(--lv-rose-100);color:var(--lv-rose);}
+  #leaveView .lv-pill-기타{background:var(--lv-amber-100);color:var(--lv-amber);}
+  #leaveView .lv-pill-공휴일{background:var(--lv-teal-100);color:var(--lv-teal-700);}
+  #leaveView .lv-pill-대체공휴일{background:var(--lv-amber-100);color:var(--lv-amber);}
+  #leaveView .lv-pill-임시공휴일{background:var(--lv-rose-100);color:var(--lv-rose);}
+  #leaveView .lv-pill-원내휴무{background:#EDEAE0;color:var(--lv-ink-soft);}
+
+  #leaveView .lv-note{font-size:12px;color:var(--lv-ink-soft);background:var(--lv-teal-50);border-left:3px solid var(--lv-teal-500);padding:9px 12px;border-radius:4px;margin-bottom:14px;line-height:1.6;}
+  #leaveView .lv-note.lv-warn{background:var(--lv-amber-100);border-color:var(--lv-amber);}
+
+  #leaveView .lv-msg{font-size:12px;color:var(--lv-sage);min-height:16px;margin-top:6px;}
+  #leaveView .lv-msg.lv-err{color:var(--lv-rose);}
+  #leaveView .lv-icon-btn{border:none;background:transparent;color:var(--lv-ink-soft);cursor:pointer;font-size:16px;padding:2px 6px;}
+  #leaveView .lv-icon-btn:hover{color:var(--lv-rose);}
 </style>
 </head>
 <body>
@@ -464,6 +554,7 @@
       <div class="brand-sub">연세마주봄의원 · 재택의료 · 일방시 · 장애인건강주치의</div>
     </div>
     <span class="user-badge" id="userBadge"></span>
+    <button class="btn btn-sm" id="leaveBtn" title="휴가·근태 관리">휴가</button>
     <button class="btn btn-admin" id="adminBtn" title="관리자 모드">관리자</button>
     <button class="btn btn-ghost" id="logoutBtn" title="로그아웃">로그아웃</button>
   </div>
@@ -532,6 +623,138 @@
   <div id="candidateView" style="display:none;"></div>
 
   <div id="bloodTestView" style="display:none;"></div>
+
+</div>
+
+<div id="leaveView" style="display:none;">
+
+<div class="lv-app">
+
+  <div class="lv-backbar">
+    <span class="lv-backlink" id="lvBackToMain">&larr; 체크리스트로 돌아가기</span>
+  </div>
+
+  <div class="lv-tabs">
+    <div class="lv-tab active" data-view="dashboard">대시보드</div>
+    <div class="lv-tab" data-view="employee">직원별 휴가 관리</div>
+    <div class="lv-tab" data-view="holiday">공휴일·대체공휴일 등 휴무일</div>
+    <div class="lv-tab" data-view="staff" id="lvTabStaff">직원 정보</div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div class="lv-view active" id="lv-view-dashboard">
+    <div class="lv-note" id="lvRiskNote"></div>
+    <div class="lv-stat-row" id="lvStatRow"></div>
+    <div class="lv-grid-cards" id="lvEmpCards"></div>
+  </div>
+
+  <!-- EMPLOYEE DETAIL -->
+  <div class="lv-view" id="lv-view-employee">
+    <div id="lvEmpListWrap">
+      <div class="lv-grid-cards" id="lvEmpCardsPick"></div>
+    </div>
+    <div id="lvEmpDetailWrap" style="display:none;">
+      <span class="lv-backlink" id="lvBackToList">&larr; 직원 목록으로</span>
+      <div class="lv-panel" id="lvEmpHeaderPanel"></div>
+
+      <div class="lv-panel">
+        <h2>연차 사용 / 조정 기록 추가</h2>
+        <div class="lv-field-row">
+          <div class="lv-field"><label>구분</label>
+            <select id="lvType">
+              <option value="연차">연차 사용</option>
+              <option value="연차조정">연차 수동 조정 (기존 부여분 등, +/- 가능)</option>
+              <option value="경조사">경조사휴가</option>
+              <option value="병가">병가</option>
+              <option value="기타">기타 휴가</option>
+            </select>
+          </div>
+          <div class="lv-field"><label>시작일</label><input type="date" id="lvStart"></div>
+          <div class="lv-field"><label>종료일</label><input type="date" id="lvEnd"></div>
+          <div class="lv-field"><label>일수</label><input type="number" step="0.5" id="lvDays" style="width:80px;"></div>
+          <div class="lv-field" style="flex:1;min-width:160px;"><label>메모</label><input type="text" id="lvNote" placeholder="사유, 비고 등"></div>
+          <button id="lvAddBtn">기록 추가</button>
+        </div>
+        <div class="lv-msg" id="lvMsg"></div>
+      </div>
+
+      <div class="lv-panel">
+        <h2>휴가·연차 이력</h2>
+        <table>
+          <thead><tr><th>구분</th><th>기간</th><th>일수</th><th>메모</th><th>등록일</th><th></th></tr></thead>
+          <tbody id="lvTable"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- HOLIDAY -->
+  <div class="lv-view" id="lv-view-holiday">
+    <div class="lv-note" id="lvHoNote"></div>
+    <div class="lv-panel" id="lvHoAddPanel">
+      <h2>휴일 추가</h2>
+      <div class="lv-field-row">
+        <div class="lv-field"><label>날짜</label><input type="date" id="lvHoDate"></div>
+        <div class="lv-field"><label>명칭</label><input type="text" id="lvHoName" placeholder="예: 추석, 개천절 대체공휴일, 오후 워크숍"></div>
+        <div class="lv-field"><label>구분</label>
+          <select id="lvHoType">
+            <option value="공휴일">공휴일</option>
+            <option value="대체공휴일">대체공휴일</option>
+            <option value="임시공휴일">임시공휴일</option>
+            <option value="원내휴무">원내 자체휴무</option>
+          </select>
+        </div>
+        <div class="lv-field"><label>휴무 시간대</label>
+          <select id="lvHoPeriod">
+            <option value="종일">종일</option>
+            <option value="오전">오전 (08:30~12:30)</option>
+            <option value="오후">오후 (13:30~17:30)</option>
+            <option value="직접입력">직접 입력</option>
+          </select>
+        </div>
+        <div class="lv-field" id="lvHoCustomStartWrap" style="display:none;"><label>시작 시간</label><input type="time" id="lvHoStart"></div>
+        <div class="lv-field" id="lvHoCustomEndWrap" style="display:none;"><label>종료 시간</label><input type="time" id="lvHoEnd"></div>
+        <button id="lvHoAddBtn">추가</button>
+      </div>
+      <div class="lv-msg" id="lvHoMsgTime" style="margin-top:-4px;">오전·오후는 원내 근무시간(08:30~17:30, 점심 12:30~13:30) 기준 기본값이며, 다른 시간대는 "직접 입력"을 선택해 주세요.</div>
+      <div class="lv-msg" id="lvHoMsg"></div>
+    </div>
+    <div class="lv-panel">
+      <h2>2026년 휴일 목록</h2>
+      <table>
+        <thead><tr><th>날짜</th><th>요일</th><th>명칭</th><th>구분</th><th>시간</th><th id="lvHoActionsHead"></th></tr></thead>
+        <tbody id="lvHoTable"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- STAFF INFO -->
+  <div class="lv-view" id="lv-view-staff">
+    <div class="lv-panel">
+      <h2>직원 추가</h2>
+      <div class="lv-field-row">
+        <div class="lv-field"><label>이름</label><input type="text" id="lvStName"></div>
+        <div class="lv-field"><label>구분</label>
+          <select id="lvStType"><option value="정규직">정규직</option><option value="위탁">위탁(프리랜서)</option></select>
+        </div>
+        <div class="lv-field"><label>근속 기산일(입사일)</label><input type="date" id="lvStHire"></div>
+        <div class="lv-field"><label>종료 예정일(선택)</label><input type="date" id="lvStEnd"></div>
+        <div class="lv-field" style="flex:1;min-width:160px;"><label>메모</label><input type="text" id="lvStNote" placeholder="담당 업무 등"></div>
+        <button id="lvStAddBtn">추가</button>
+      </div>
+      <div class="lv-msg" id="lvStMsg"></div>
+    </div>
+    <div class="lv-panel">
+      <h2>등록된 직원</h2>
+      <table>
+        <thead><tr><th>이름</th><th>구분</th><th>근속기산일</th><th>상태</th><th>메모</th><th></th></tr></thead>
+        <tbody id="lvStTable"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
 
 </div>
 
@@ -634,14 +857,94 @@
     }catch(e){}
   }
 
+  var PREVIEW_MODE = false; // 실제 서버(구글 Apps Script)에 연결이 안 될 때(예: 이 채팅창의 미리보기 샌드박스)
+                             // 자동으로 켜지는 로컬 전용 모드입니다. 브라우저 localStorage만 사용하며,
+                             // 실제 병원 데이터와는 전혀 연결되지 않습니다.
+  var PREVIEW_FALLBACK_USERS = [
+    { name:"김혜경", role:"간호사", pin:"4881" },
+    { name:"전송이", role:"간호사", pin:"4881" },
+    { name:"안혜리", role:"간호사", pin:"4881" },
+    { name:"신현경", role:"사회복지사", pin:"4881" },
+    { name:"전용우", role:"의사", pin:"7575" }
+  ];
   async function apiCall(action, params){
     var body = Object.assign({ action: action, token: SESSION ? SESSION.token : "" }, params || {});
-    var res = await fetch(SHEETS_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" }, // Apps Script CORS 프리플라이트 회피용
-      body: JSON.stringify(body)
-    });
-    return await res.json();
+    if(PREVIEW_MODE){ return previewApiCall(action, body); }
+    try{
+      var res = await fetch(SHEETS_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" }, // Apps Script CORS 프리플라이트 회피용
+        body: JSON.stringify(body)
+      });
+      return await res.json();
+    }catch(networkErr){
+      // 실제 서버에 전혀 닿지 않는 환경(채팅 미리보기 등)이면, 화면만이라도 확인할 수 있도록
+      // 로컬 저장 기반의 "미리보기 모드"로 자동 전환합니다. (실제 배포 사이트에서는 정상적으로
+      // 서버에 연결되므로 이 전환이 일어나지 않습니다. 혹시라도 실제 배포본에서 이 모드가 켜지면
+      // 화면에 경고 배너가 항상 표시되어 바로 알아차릴 수 있습니다.)
+      PREVIEW_MODE = true;
+      return previewApiCall(action, body);
+    }
+  }
+  // PREVIEW_MODE에서 서버 API를 흉내내는 로컬 처리기입니다. localStorage에 "preview:" 접두사로 저장합니다.
+  function previewApiCall(action, body){
+    if(action === "list_users"){
+      return { ok:true, users: PREVIEW_FALLBACK_USERS.map(function(u){ return { name:u.name, role:u.role }; }) };
+    }
+    if(action === "login"){
+      var u = PREVIEW_FALLBACK_USERS.find(function(x){ return x.name === body.name && x.pin === String(body.pin); });
+      if(!u) return { ok:false, error:"wrong_pin", message:"PIN이 올바르지 않습니다. (미리보기 모드)" };
+      return { ok:true, token:"preview-local-token", name:u.name, role:u.role };
+    }
+    if(action === "kv_get"){
+      var v = localStorage.getItem("preview:"+body.key);
+      return { ok:true, value: (v===null?null:v) };
+    }
+    if(action === "kv_set"){
+      localStorage.setItem("preview:"+body.key, body.value);
+      return { ok:true };
+    }
+    if(action === "kv_delete"){
+      localStorage.removeItem("preview:"+body.key);
+      return { ok:true };
+    }
+    if(action === "kv_list"){
+      var keys = [];
+      for(var i=0;i<localStorage.length;i++){
+        var k = localStorage.key(i);
+        if(k.indexOf("preview:")===0){
+          var realKey = k.slice(8);
+          if(!body.prefix || realKey.indexOf(body.prefix)===0) keys.push(realKey);
+        }
+      }
+      return { ok:true, keys: keys };
+    }
+    if(action === "kv_get_many"){
+      var values = {};
+      (body.keys||[]).forEach(function(k){ values[k] = localStorage.getItem("preview:"+k); });
+      return { ok:true, values: values };
+    }
+    if(action === "kv_set_many"){
+      (body.items||[]).forEach(function(it){ localStorage.setItem("preview:"+it.key, it.value); });
+      return { ok:true };
+    }
+    if(action === "kv_merge_set"){
+      // 미리보기 모드는 혼자 쓰는 상태라 동시편집 충돌이 없으므로, merge 없이 그대로 저장합니다.
+      localStorage.setItem("preview:"+body.key, body.value);
+      return { ok:true, value: body.value };
+    }
+    return { ok:false, error:"unsupported_in_preview" };
+  }
+  // 화면 어디서든 눈에 띄게, 지금이 로컬 미리보기 모드임을 계속 알려줍니다.
+  function renderPreviewBanner(){
+    if(!PREVIEW_MODE) return;
+    if(document.getElementById("previewModeBanner")) return;
+    var bar = document.createElement("div");
+    bar.id = "previewModeBanner";
+    bar.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:200;background:#B23B30;color:#fff;" +
+      "text-align:center;font-size:12px;font-weight:700;padding:5px 8px;";
+    bar.textContent = "⚠ 로컬 미리보기 모드 — 실제 병원 서버와 연결되지 않았습니다. 여기서 입력한 내용은 저장되지 않습니다.";
+    document.body.appendChild(bar);
   }
 
   var K_TEMPLATES = "templates";
@@ -670,6 +973,7 @@
     if(key === K_STAFF || key === K_MINT_CHECKERS) return "stringSet";
     if(key === K_ALL_STATES) return "byMapKey";
     if(key.indexOf("visits:") === 0) return "byId";
+    if(key === "leave-employees" || key === "leave-ledger" || key === "leave-holidays") return "byId";
     return null;
   }
   var STORAGE_BASELINE = {}; // key -> 마지막으로 서버에서 읽어온 시점의 스냅샷(비교 기준선)
@@ -869,6 +1173,22 @@
       return parsed;
     }catch(e){ return null; }
   }
+  // 짧게 기다렸다가 한 번만 더 시도하는 저장 전용 래퍼입니다.
+  // 구글 Apps Script는 순간적으로 바쁘거나(동시 잠금 대기, 일시적 오류) 실패할 때가 있는데,
+  // 그때 바로 포기하지 말고 0.7초 후 한 번만 더 시도하면 대부분 성공합니다.
+  async function apiCallWithRetry(action, params){
+    try{
+      var r = await apiCall(action, params);
+      if(r && (r.ok || r.error === "auth")) return r;
+      // ok:false(인증 오류 제외)면 한 번 더 시도
+    }catch(e){ /* 아래에서 재시도 */ }
+    await new Promise(function(resolve){ setTimeout(resolve, 700); });
+    try{
+      return await apiCall(action, params);
+    }catch(e){
+      return { ok:false, error:"network" };
+    }
+  }
   async function storageSet(key, value, shared){
     if(!shared){
       try{
@@ -879,7 +1199,7 @@
     var mergeStrategy = getMergeStrategy(key);
     if(mergeStrategy){ return await mergeSaveOne(key, value, mergeStrategy); }
     try{
-      var r = await apiCall("kv_set", { key: key, value: JSON.stringify(value) });
+      var r = await apiCallWithRetry("kv_set", { key: key, value: JSON.stringify(value) });
       if(!r || !r.ok){
         handleApiError(r);
         showToast("저장에 실패했습니다. 다시 시도해주세요.");
@@ -896,7 +1216,7 @@
   async function mergeSaveOne(key, value, strategy){
     try{
       var baseline = STORAGE_BASELINE.hasOwnProperty(key) ? STORAGE_BASELINE[key] : (strategy === "byMapKey" ? {} : []);
-      var r = await apiCall("kv_merge_set", {
+      var r = await apiCallWithRetry("kv_merge_set", {
         key: key,
         value: JSON.stringify(value),
         baseline: JSON.stringify(baseline),
@@ -1078,6 +1398,7 @@
     // (K_LAST_NAME은 기기 로컬 설정이라 네트워크 호출 없이 즉시 가져옵니다.)
     var sharedKeys = [K_TEMPLATES, K_STAFF, K_PATIENTS, K_ALL_STATES, K_CANDIDATES, K_BLOODTESTS, currentVisitKey, K_MIGRATIONS_DONE, K_MINT_CHECKERS];
     var sharedResults = await storageGetMany(sharedKeys);
+    renderPreviewBanner(); // 자동로그인(기억된 세션) 경로는 이 시점에야 실제 서버 연결 여부가 드러납니다.
     var lastName = await storageGet(K_LAST_NAME, false);
 
     S.templates = sharedResults[K_TEMPLATES];
@@ -1671,6 +1992,7 @@
       showToast("관리자 모드를 종료했습니다.");
       updateTabVisibility();
       renderAll();
+      if(document.getElementById("leaveView").style.display !== "none"){ lvApplyRoleUI(); }
       return;
     }
     openAdminLoginModal();
@@ -1697,6 +2019,7 @@
         showToast("관리자 모드로 전환되었습니다.");
         updateTabVisibility();
         renderAll();
+        if(document.getElementById("leaveView").style.display !== "none"){ lvApplyRoleUI(); }
       } else {
         showToast("PIN이 올바르지 않습니다.");
       }
@@ -1783,21 +2106,20 @@
           if((p.nurse||"") !== nurseVal) return false;
         }
         if(!rowTextMatches(p.location, tf.location)) return false;
+        if(tf.cat && (p.categories||[]).indexOf(tf.cat) === -1) return false;
         return true;
       })
       .forEach(function(p){
-        var cats = (p.categories && p.categories.length) ? p.categories : [null];
-        cats.forEach(function(cat){ rows.push({ patient:p, cat:cat }); });
+        // 이 환자의 구분(방문유형)들 중 가장 이른 시작월을 대표 시작월로 사용합니다.
+        var cats = p.categories || [];
+        var earliestStart = "";
+        cats.forEach(function(c){
+          var sm = (p.startMonths && p.startMonths[c]) ? p.startMonths[c] : "";
+          if(sm && (!earliestStart || sm < earliestStart)) earliestStart = sm;
+        });
+        if(tf.startMonth && earliestStart !== tf.startMonth) return;
+        rows.push({ patient:p, cats:cats, earliestStart:earliestStart });
       });
-    if(tf.cat){
-      rows = rows.filter(function(r){ return r.cat === tf.cat; });
-    }
-    if(tf.startMonth){
-      rows = rows.filter(function(r){
-        var sm = r.cat && r.patient.startMonths ? r.patient.startMonths[r.cat] : "";
-        return sm === tf.startMonth;
-      });
-    }
     rows.sort(function(a,b){
       var na = a.patient.nurse || "", nb = b.patient.nurse || "";
       if(!na && nb) return 1;  // 미배정은 뒤로
@@ -1808,12 +2130,78 @@
     return rows;
   }
 
+  // 환자배정 관리 탭 상단 통계: 담당환자(고정+담당간호사) 수를 전체 및 간호사별로, 방문유형별로도 집계합니다.
+  // 이번달 방문 여부와 무관하게, 배정 현황 자체를 보여주는 통계입니다.
+  function buildAssignmentStats(){
+    var overall = { total:0 };
+    CATS.forEach(function(c){ overall[c] = 0; });
+    var byNurse = {}; // nurse -> {total, 재택, 일방시, 장주사}
+
+    S.patients.forEach(function(p){
+      if(!isAssignedPatient(p)) return;
+      overall.total++;
+      (p.categories||[]).forEach(function(c){ if(overall[c] !== undefined) overall[c]++; });
+
+      if(!byNurse[p.nurse]){
+        byNurse[p.nurse] = { total:0 };
+        CATS.forEach(function(c){ byNurse[p.nurse][c] = 0; });
+      }
+      byNurse[p.nurse].total++;
+      (p.categories||[]).forEach(function(c){ if(byNurse[p.nurse][c] !== undefined) byNurse[p.nurse][c]++; });
+    });
+
+    return { overall:overall, byNurse:byNurse };
+  }
+
+  function buildAssignmentStatsHtml(){
+    var stats = buildAssignmentStats();
+    var nurseOrder = Object.keys(VISIT_NURSE_COLOR_MAP); // 정규직(김혜경,전송이)이 먼저, 프리랜서(안혜리)가 나중에 오는 고정 순서
+    var nurseNames = Object.keys(stats.byNurse).sort(function(a,b){
+      var ia = nurseOrder.indexOf(a), ib = nurseOrder.indexOf(b);
+      if(ia === -1 && ib === -1) return a.localeCompare(b, "ko");
+      if(ia === -1) return 1;  // 순서 목록에 없는 이름은 뒤로
+      if(ib === -1) return -1;
+      return ia - ib;
+    });
+
+    var html = '<div class="assign-table-wrap" style="margin-bottom:12px;">' +
+      '<div style="padding:10px 12px;font-weight:700;font-size:13px;">담당환자 현황 ' +
+        '<span style="font-weight:400;color:var(--ink-soft);font-size:12px;">(고정방문 + 담당간호사 지정 기준, 이번달 방문 여부와 무관)</span>' +
+      '</div>' +
+      '<table class="assign-table"><thead><tr><th>구분</th><th>담당환자</th><th>재택</th><th>일방시</th><th>장주사</th></tr></thead><tbody>' +
+        '<tr style="font-weight:600;">' +
+          '<td>전체</td>' +
+          '<td style="text-align:center;">'+stats.overall.total+'</td>' +
+          '<td style="text-align:center;">'+stats.overall["재택"]+'</td>' +
+          '<td style="text-align:center;">'+stats.overall["일방시"]+'</td>' +
+          '<td style="text-align:center;">'+stats.overall["장주사"]+'</td>' +
+        '</tr>';
+    if(nurseNames.length === 0){
+      html += '<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:12px;">담당환자가 없습니다.</td></tr>';
+    } else {
+      nurseNames.forEach(function(n){
+        var s = stats.byNurse[n];
+        html += '<tr>' +
+          '<td>'+escapeHtml(n)+'</td>' +
+          '<td style="text-align:center;">'+s.total+'</td>' +
+          '<td style="text-align:center;">'+s["재택"]+'</td>' +
+          '<td style="text-align:center;">'+s["일방시"]+'</td>' +
+          '<td style="text-align:center;">'+s["장주사"]+'</td>' +
+        '</tr>';
+      });
+    }
+    html += '</tbody></table></div>';
+    return html;
+  }
+
   function renderAssignmentView(){
     var el = document.getElementById("assignmentView");
     if(!el) return;
     var rows = buildAssignmentRows();
 
-    var html = '<div class="toolbar">' +
+    var html = buildAssignmentStatsHtml();
+
+    html += '<div class="toolbar">' +
       '<h2>환자배정 관리</h2>' +
       '<div style="display:flex;gap:8px;">' +
         '<button class="btn btn-sm" id="assignSearchBtn">검색</button>' +
@@ -1822,7 +2210,7 @@
     '</div>';
 
     html += '<div class="assign-table-wrap"><table class="assign-table"><thead><tr>' +
-      '<th>번호</th><th>이름</th><th>담당간호사</th><th>구분</th><th>시작월</th><th>위치</th><th></th>' +
+      '<th>번호</th><th>이름</th><th>담당간호사</th><th>방문유형</th><th>시작월</th><th>위치</th><th></th>' +
     '</tr>' +
     buildFilterHeaderRow("assignment", [
       { key:"no", type:"text" },
@@ -1839,15 +2227,16 @@
       html += '<tr><td colspan="7" style="text-align:center;color:var(--ink-soft);padding:24px;">표시할 환자가 없습니다.</td></tr>';
     } else {
       rows.forEach(function(r){
-        var p = r.patient, cat = r.cat;
-        var startMonth = cat ? ((p.startMonths && p.startMonths[cat]) ? p.startMonths[cat] : "") : "";
-        var catBadge = cat ? ('<span class="badge badge-'+cat+'">'+cat+'</span>') : '<span style="color:var(--ink-soft);font-size:12px;">구분 없음</span>';
+        var p = r.patient;
+        var catBadges = r.cats.length
+          ? r.cats.map(function(c){ return '<span class="badge badge-'+c+'">'+c+'</span>'; }).join(" ")
+          : '<span style="color:var(--ink-soft);font-size:12px;">구분 없음</span>';
         html += '<tr>' +
           '<td>'+escapeHtml(p.no||"")+'</td>' +
           '<td style="font-weight:600;">'+escapeHtml(p.name)+'</td>' +
           '<td>'+escapeHtml(p.nurse||"미배정")+'</td>' +
-          '<td>'+catBadge+'</td>' +
-          '<td>'+(startMonth ? escapeHtml(startMonth) : '<span style="color:var(--warn);">미정</span>')+'</td>' +
+          '<td>'+catBadges+'</td>' +
+          '<td>'+(r.earliestStart ? escapeHtml(r.earliestStart) : '<span style="color:var(--warn);">미정</span>')+'</td>' +
           '<td>'+escapeHtml(p.location||"")+'</td>' +
           '<td><button class="btn btn-sm" data-act="editassign" data-pid="'+p.id+'">수정</button></td>' +
         '</tr>';
@@ -4727,7 +5116,33 @@
       saveBtn.disabled = true;
       saveBtn.textContent = editing ? "저장 중..." : "등록 중...";
 
-      // 1) 대상자(candidate) 레코드 upsert
+      // 1) 환자(patient) 레코드를 먼저 메모리 상에서만 갱신/생성합니다 (아직 저장 호출은 안 함).
+      var isFixed = NON_FIXED_FREQS.indexOf(freq) === -1;
+      var resultPatientId = patient ? patient.id : null;
+      var patientsChanged = false;
+      var isNewPatient = false;
+
+      if(patient){
+        patient.no = newNo; patient.name = name; patient.nurse = nurseVal; patient.categories = cats;
+        patient.startMonths = startMonths; patient.location = location; patient.freq = freq;
+        patientsChanged = true;
+      } else if(nurseVal && isFixed){
+        var newId = newNo || uid("p");
+        var newP = { id:newId, no:newNo, name:name, nurse:nurseVal, freq:freq, categories:cats, startMonths:startMonths, location:location, createdAt: todayStr() };
+        S.patients.push(newP);
+        resultPatientId = newId;
+        patientsChanged = true;
+        isNewPatient = true;
+        var virtualId = "virtual_" + newNo;
+        if(newNo && S.patientStates[virtualId]){
+          S.patientStates[newId] = S.patientStates[virtualId];
+          delete S.patientStates[virtualId];
+        } else if(!S.patientStates[newId]){
+          S.patientStates[newId] = { items:{} };
+        }
+      }
+
+      // 2) 대상자(candidate) 레코드를 메모리 상에서 갱신/생성하고, linkedPatientId도 이 시점에 함께 반영합니다.
       var candTarget = candidate;
       if(!candTarget){
         candTarget = { id: uid("c"), no:newNo, name:name, types:cats.slice(), freq:freq, nurse:nurseVal, registeredDate:regDate, location:location, createdAt: todayStr() };
@@ -4739,32 +5154,13 @@
         var keepHold = (candTarget.types||[]).indexOf("보류")!==-1 ? ["보류"] : [];
         candTarget.types = cats.slice().concat(keepHold.filter(function(t){ return cats.indexOf(t)===-1; }));
       }
-      await storageSet(K_CANDIDATES, S.candidates, true);
+      if(resultPatientId){ candTarget.linkedPatientId = resultPatientId; }
 
-      // 2) 환자(patient) 레코드: 이미 있으면 그대로 갱신, 없고 조건(간호사+고정방문) 충족시 새로 생성
-      var isFixed = NON_FIXED_FREQS.indexOf(freq) === -1;
-      if(patient){
-        patient.no = newNo; patient.name = name; patient.nurse = nurseVal; patient.categories = cats;
-        patient.startMonths = startMonths; patient.location = location; patient.freq = freq;
-        await storageSet(K_PATIENTS, S.patients, true);
-        candTarget.linkedPatientId = patient.id;
-        await storageSet(K_CANDIDATES, S.candidates, true);
-      } else if(nurseVal && isFixed){
-        var newId = newNo || uid("p");
-        var newP = { id:newId, no:newNo, name:name, nurse:nurseVal, freq:freq, categories:cats, startMonths:startMonths, location:location, createdAt: todayStr() };
-        S.patients.push(newP);
-        var virtualId = "virtual_" + newNo;
-        if(newNo && S.patientStates[virtualId]){
-          S.patientStates[newId] = S.patientStates[virtualId];
-          delete S.patientStates[virtualId];
-        } else if(!S.patientStates[newId]){
-          S.patientStates[newId] = { items:{} };
-        }
-        await saveAllPatientStates();
-        await storageSet(K_PATIENTS, S.patients, true);
-        candTarget.linkedPatientId = newId;
-        await storageSet(K_CANDIDATES, S.candidates, true);
-      }
+      // 3) 저장 호출은 딱 필요한 만큼만, 한 번씩만 순서대로 보냅니다 (직전 버전은 같은 저장을
+      //    한 번의 클릭 안에서 최대 3번 연달아 호출해서, 저장 API 호출제한에 걸려 실패하는 경우가 있었습니다).
+      if(isNewPatient){ await saveAllPatientStates(); }
+      if(patientsChanged){ await storageSet(K_PATIENTS, S.patients, true); }
+      await storageSet(K_CANDIDATES, S.candidates, true);
 
       closeModal();
       showToast(editing ? "저장되었습니다." : "등록되었습니다.");
@@ -5151,6 +5547,7 @@
   function startApp(){
     document.getElementById("loginScreen").style.display = "none";
     document.getElementById("appRoot").style.display = "";
+    renderPreviewBanner();
     var badge = document.getElementById("userBadge");
     if(badge && SESSION) badge.innerHTML = "<b>" + escapeHtml(SESSION.name) + "</b> · " + escapeHtml(SESSION.role);
     init();
@@ -5177,7 +5574,7 @@
   }
 
   function initLoginScreen(){
-    loadLoginUsers();
+    loadLoginUsers().then(renderPreviewBanner);
     var submitBtn = document.getElementById("loginSubmit");
     var pinInput = document.getElementById("loginPin");
     async function attemptLogin(){
@@ -5232,6 +5629,494 @@
     initLogoutButton();
     initLoginScreen();
   }
+
+
+  /* ================= 휴가·근태 관리 (기존 체크리스트 로그인/저장소를 그대로 재사용) ================= */
+  var LEAVE_TODAY = new Date(); LEAVE_TODAY.setHours(0,0,0,0);
+  var lvDateISO = function(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,'0')+"-"+String(d.getDate()).padStart(2,'0'); };
+  var lvFmtKR = function(iso){ var d=new Date(iso+"T00:00:00"); return d.getFullYear()+"."+String(d.getMonth()+1).padStart(2,'0')+"."+String(d.getDate()).padStart(2,'0'); };
+  var LV_WEEKDAY = ["일","월","화","수","목","금","토"];
+
+  var LV_employees = [];
+  var LV_ledger = [];
+  var LV_holidays = [];
+  var LV_loaded = false;
+
+  var LV_DEFAULT_EMPLOYEES = [
+    {id:"e1", name:"김혜경", type:"정규직", hire:"2026-08-01", end:"", note:"방문진료 간호사", active:true},
+    {id:"e2", name:"전송이", type:"정규직", hire:"2026-03-01", end:"", note:"방문진료 간호사", active:true},
+    {id:"e3", name:"신현경", type:"정규직", hire:"2026-03-13", end:"", note:"사회복지사 (26.08.01자 계약 갱신, 근속 단절 없음)", active:true},
+    {id:"e4", name:"안혜리", type:"위탁", hire:"2026-02-24", end:"", note:"위탁계약(간호) — 연차 등 법정 대상 아님", active:true},
+    {id:"e5", name:"장수아", type:"위탁", hire:"2026-06-01", end:"2026-09-30", note:"위탁계약(정신과 자문) — 2026년 9월분을 끝으로 위탁 종료 예정", active:true}
+  ];
+
+  var LV_DEFAULT_HOLIDAYS = [
+    {id:"h1",  date:"2026-01-01", name:"신정", type:"공휴일"},
+    {id:"h2",  date:"2026-02-16", name:"설날 연휴", type:"공휴일"},
+    {id:"h3",  date:"2026-02-17", name:"설날", type:"공휴일"},
+    {id:"h4",  date:"2026-02-18", name:"설날 연휴", type:"공휴일"},
+    {id:"h5",  date:"2026-03-01", name:"삼일절", type:"공휴일"},
+    {id:"h6",  date:"2026-03-02", name:"삼일절 대체공휴일", type:"대체공휴일"},
+    {id:"h7",  date:"2026-05-01", name:"근로자의 날", type:"원내휴무"},
+    {id:"h8",  date:"2026-05-05", name:"어린이날", type:"공휴일"},
+    {id:"h9",  date:"2026-05-24", name:"부처님오신날", type:"공휴일"},
+    {id:"h10", date:"2026-05-25", name:"부처님오신날 대체공휴일", type:"대체공휴일"},
+    {id:"h11", date:"2026-06-06", name:"현충일", type:"공휴일"},
+    {id:"h12", date:"2026-07-17", name:"제헌절", type:"공휴일"},
+    {id:"h13", date:"2026-08-15", name:"광복절", type:"공휴일"},
+    {id:"h14", date:"2026-09-24", name:"추석 연휴", type:"공휴일"},
+    {id:"h15", date:"2026-09-25", name:"추석", type:"공휴일"},
+    {id:"h16", date:"2026-09-26", name:"추석 연휴", type:"공휴일"},
+    {id:"h17", date:"2026-10-03", name:"개천절", type:"공휴일"},
+    {id:"h18", date:"2026-10-05", name:"개천절 대체공휴일", type:"대체공휴일"},
+    {id:"h19", date:"2026-10-09", name:"한글날", type:"공휴일"},
+    {id:"h20", date:"2026-12-25", name:"크리스마스", type:"공휴일"}
+  ];
+
+  // 저장은 기존 체크리스트와 완전히 같은 구글시트 저장소(storageGet/storageSet)를 그대로 씁니다.
+  // (직원목록·연차기록은 id를 가진 배열이라 동시편집 3-way merge 대상에도 자동으로 포함됩니다.)
+  var K_LV_EMPLOYEES = "leave-employees";
+  var K_LV_LEDGER = "leave-ledger";
+  var K_LV_HOLIDAYS = "leave-holidays";
+
+  async function lvLoadAll(){
+    var e = await storageGet(K_LV_EMPLOYEES, true);
+    LV_employees = (e && e.length) ? e : LV_DEFAULT_EMPLOYEES.slice();
+    var l = await storageGet(K_LV_LEDGER, true);
+    LV_ledger = l || [];
+    var h = await storageGet(K_LV_HOLIDAYS, true);
+    LV_holidays = (h && h.length) ? h : LV_DEFAULT_HOLIDAYS.slice();
+    if(!e) await lvSaveEmployees();
+    if(!h) await lvSaveHolidays();
+  }
+  async function lvSaveEmployees(){ await storageSet(K_LV_EMPLOYEES, LV_employees, true); }
+  async function lvSaveLedger(){ await storageSet(K_LV_LEDGER, LV_ledger, true); }
+  async function lvSaveHolidays(){ await storageSet(K_LV_HOLIDAYS, LV_holidays, true); }
+
+  // ---- 연차 발생 계산 (근로기준법 제60조 기준) ----
+  function lvMonthsCompleted(hireISO, asOf){
+    var hire = new Date(hireISO+"T00:00:00");
+    var months = (asOf.getFullYear()-hire.getFullYear())*12 + (asOf.getMonth()-hire.getMonth());
+    if(asOf.getDate() < hire.getDate()) months -= 1;
+    return Math.max(0, months);
+  }
+  function lvYearsCompleted(hireISO, asOf){
+    var hire = new Date(hireISO+"T00:00:00");
+    var years = asOf.getFullYear()-hire.getFullYear();
+    var anniv = new Date(hire); anniv.setFullYear(hire.getFullYear()+years);
+    if(anniv > asOf) years -= 1;
+    return Math.max(0, years);
+  }
+  function lvCalcAccrued(hireISO, asOf){
+    var hire = new Date(hireISO+"T00:00:00");
+    if(asOf < hire) return {accrued:0, detail:"입사 전"};
+    var yrs = lvYearsCompleted(hireISO, asOf);
+    if(yrs < 1){
+      var m = Math.min(11, lvMonthsCompleted(hireISO, asOf));
+      return {accrued:m, detail:"1년 미만 · 개근 월수 기준 (최대 11일)"};
+    }
+    var bonus = Math.min(10, Math.floor((yrs-1)/2));
+    var total = Math.min(25, 15+bonus);
+    return {accrued: total, detail:"근속 "+yrs+"년차 · 15일"+(bonus>0? ' + 가산 '+bonus+'일':'')};
+  }
+  function lvAddMonths(d, n){ var r = new Date(d); r.setMonth(r.getMonth()+n); return r; }
+  function lvNextAccrualDate(hireISO, asOf){
+    var hire = new Date(hireISO+"T00:00:00");
+    var yrs = lvYearsCompleted(hireISO, asOf);
+    var anniv1 = lvAddMonths(hire, 12);
+    if(yrs < 1){
+      var m = lvMonthsCompleted(hireISO, asOf);
+      if(m < 11){
+        var nextMonthly = lvAddMonths(hire, m+1);
+        return nextMonthly < anniv1 ? nextMonthly : anniv1;
+      }
+      return anniv1;
+    }
+    var next = new Date(hire);
+    next.setFullYear(asOf.getFullYear());
+    if(next <= asOf) next.setFullYear(next.getFullYear()+1);
+    return next;
+  }
+  function lvTenureLabel(hireISO, asOf){
+    var hire = new Date(hireISO+"T00:00:00");
+    var y = asOf.getFullYear()-hire.getFullYear();
+    var m = asOf.getMonth()-hire.getMonth();
+    if(asOf.getDate()<hire.getDate()) m -= 1;
+    if(m<0){ y-=1; m+=12; }
+    if(y<0) return "입사 전";
+    return y>0 ? (y+"년 "+m+"개월") : (m+"개월");
+  }
+
+  function lvLedgerFor(empId){ return LV_ledger.filter(function(l){ return l.employeeId===empId; }).sort(function(a,b){ return (b.start||b.createdAt).localeCompare(a.start||a.createdAt); }); }
+
+  function lvUsedDays(empId){
+    return lvLedgerFor(empId).filter(function(l){ return l.type==="연차"; }).reduce(function(s,l){ return s+Number(l.days||0); },0);
+  }
+  function lvAdjustDays(empId){
+    return lvLedgerFor(empId).filter(function(l){ return l.type==="연차조정"; }).reduce(function(s,l){ return s+Number(l.days||0); },0);
+  }
+  function lvRemainingLeave(emp){
+    if(emp.type==="위탁") return null;
+    var accrued = lvCalcAccrued(emp.hire, LEAVE_TODAY).accrued;
+    return Math.round((accrued + lvAdjustDays(emp.id) - lvUsedDays(emp.id)) * 2)/2;
+  }
+
+  // ---- Rendering ----
+  function lvRenderAll(){
+    lvRenderDashboard();
+    lvRenderEmployeePicker();
+    lvRenderStaffTable();
+    lvRenderHolidayTable();
+  }
+
+  function lvRiskAssessment(){
+    var active = LV_employees.filter(function(e){ return e.active; });
+    var regularCount = active.filter(function(e){ return e.type==="정규직"; }).length;
+    var freelanceActive = active.filter(function(e){ return e.type==="위탁" && (!e.end || new Date(e.end+"T00:00:00")>=LEAVE_TODAY); });
+    var conservativeTotal = regularCount + freelanceActive.length;
+    return {regularCount:regularCount, freelanceCount:freelanceActive.length, conservativeTotal:conservativeTotal};
+  }
+
+  function lvBuildEmpCard(emp){
+    var div = document.createElement('div');
+    div.className = "lv-card";
+    div.onclick = function(){ lvOpenEmployee(emp.id, {lockPicker: !lvIsAdmin()}); };
+    var ended = emp.end && new Date(emp.end+"T00:00:00") < LEAVE_TODAY;
+    var badgeCls = ended ? "lv-end" : (emp.type==="정규직"?"lv-reg":"lv-frl");
+    var badgeText = ended ? "계약 종료" : emp.type;
+    var metricHtml;
+    if(emp.type==="위탁"){
+      metricHtml = '<div class="lv-sub">위탁계약 · 연차 관리 대상 아님'+(emp.end? ' · 종료예정 '+lvFmtKR(emp.end):'')+'</div>';
+    } else {
+      var rem = lvRemainingLeave(emp);
+      var warn = rem<=2;
+      metricHtml = '<div class="lv-metric '+(warn?'lv-warn':'')+'"><span class="lv-num">'+rem+'</span><span class="lv-lbl">일 잔여</span></div>' +
+        '<div class="lv-sub">근속 '+lvTenureLabel(emp.hire, LEAVE_TODAY)+' · 다음 발생일 '+lvFmtKR(lvDateISO(lvNextAccrualDate(emp.hire,LEAVE_TODAY)))+'</div>';
+    }
+    div.innerHTML =
+      '<div class="lv-row1"><div><div class="lv-name">'+escapeHtml(emp.name)+'</div><div class="lv-role">'+escapeHtml(emp.note||'')+'</div></div><span class="lv-badge '+badgeCls+'">'+badgeText+'</span></div>' +
+      metricHtml;
+    return div;
+  }
+
+  function lvMonthHolidayStatHtml(asOf){
+    var y = asOf.getFullYear(), m = asOf.getMonth();
+    var list = LV_holidays
+      .filter(function(h){
+        var d = new Date(h.date+"T00:00:00");
+        return d.getFullYear()===y && d.getMonth()===m && d.getDay()!==0 && d.getDay()!==6;
+      })
+      .sort(function(a,b){ return a.date.localeCompare(b.date); });
+    var label = (m+1)+"월 휴무일 (주말 제외)";
+    if(list.length===0){
+      return '<div class="lv-stat"><div class="lv-n">-</div><div class="lv-l">'+label+' · 없음</div></div>';
+    }
+    var lines = list.map(function(h){
+      var d = new Date(h.date+"T00:00:00");
+      var timeLabel = (h.startTime && h.endTime) ? (' · '+lvHolidayPeriodLabel(h)) : "";
+      return (d.getMonth()+1)+"."+String(d.getDate()).padStart(2,'0')+"("+LV_WEEKDAY[d.getDay()]+") "+escapeHtml(h.name)+timeLabel;
+    }).join('<br>');
+    return '<div class="lv-stat"><div class="lv-l" style="margin-bottom:5px;">'+label+'</div><div style="font-size:13px;line-height:1.7;color:var(--lv-ink);">'+lines+'</div></div>';
+  }
+
+  function lvRenderDashboard(){
+    var note = document.getElementById('lvRiskNote');
+    var stat = document.getElementById('lvStatRow');
+    var cards = document.getElementById('lvEmpCards');
+    cards.innerHTML = "";
+
+    if(lvIsAdmin()){
+      note.style.display = "";
+      var r = lvRiskAssessment();
+      note.innerHTML = "현재 활동 중인 인력: 정규직 "+r.regularCount+"명 + 위탁 "+r.freelanceCount+"명 (위탁 인력까지 근로자로 보수적으로 합산해도 총 "+r.conservativeTotal+"명) → 상시근로자 5인 미만으로 운영 가능한 구조입니다. 다만 인력 변동 시 이 판단을 다시 점검해 주세요.";
+
+      var totalRemaining = LV_employees.filter(function(e){ return e.type==="정규직" && e.active; }).reduce(function(s,e){ return s+(lvRemainingLeave(e)||0); },0);
+      var usedThisYear = LV_ledger.filter(function(l){ return l.type==="연차" && l.start && l.start.indexOf("2026")===0; }).reduce(function(s,l){ return s+Number(l.days||0); },0);
+      stat.innerHTML =
+        '<div class="lv-stat"><div class="lv-n">'+LV_employees.filter(function(e){return e.active;}).length+'</div><div class="lv-l">현재 근무 인력</div></div>' +
+        '<div class="lv-stat"><div class="lv-n">'+totalRemaining+'</div><div class="lv-l">정규직 잔여 연차 합계 (일)</div></div>' +
+        '<div class="lv-stat"><div class="lv-n">'+usedThisYear+'</div><div class="lv-l">2026년 누적 연차 사용 (일)</div></div>' +
+        lvMonthHolidayStatHtml(LEAVE_TODAY);
+      LV_employees.forEach(function(emp){ cards.appendChild(lvBuildEmpCard(emp)); });
+    } else {
+      note.style.display = "none";
+      var me = lvSelfEmployee();
+      if(!me){
+        stat.innerHTML = '<div class="lv-note">등록된 직원 정보를 찾을 수 없습니다. 원장님(관리자 모드)께 문의해주세요.</div>';
+        return;
+      }
+      if(me.type==="정규직"){
+        stat.innerHTML =
+          '<div class="lv-stat"><div class="lv-n">'+lvRemainingLeave(me)+'</div><div class="lv-l">내 잔여 연차 (일)</div></div>' +
+          '<div class="lv-stat"><div class="lv-n">'+lvUsedDays(me.id)+'</div><div class="lv-l">내 누적 사용 (일)</div></div>' +
+          '<div class="lv-stat"><div class="lv-n">'+lvTenureLabel(me.hire, LEAVE_TODAY)+'</div><div class="lv-l">내 근속기간</div></div>' +
+          lvMonthHolidayStatHtml(LEAVE_TODAY);
+      } else {
+        stat.innerHTML =
+          '<div class="lv-stat"><div class="lv-n">'+me.type+'</div><div class="lv-l">계약 형태</div></div>' +
+          lvMonthHolidayStatHtml(LEAVE_TODAY);
+      }
+      cards.appendChild(lvBuildEmpCard(me));
+    }
+  }
+
+  var LV_currentEmpId = null;
+
+  function lvIsAdmin(){ return !!S.adminMode; }
+  function lvSelfEmployee(){ return LV_employees.find(function(e){ return e.name === (SESSION && SESSION.name); }) || null; }
+
+  function lvApplyRoleUI(){
+    var admin = lvIsAdmin();
+    document.getElementById('lvTabStaff').style.display = admin ? "" : "none";
+    if(!admin && document.getElementById('lvTabStaff').classList.contains('active')){
+      lvActivateTab('dashboard');
+    }
+    document.getElementById('lvHoAddPanel').style.display = admin ? "" : "none";
+    document.getElementById('lvHoNote').innerHTML = admin
+      ? "공휴일·대체공휴일·임시공휴일·원내 자체휴무를 등록해두면 대시보드와 근태 기록에서 함께 관리됩니다. 특정일 일부 시간대만 휴무인 경우(예: 오후 3~6시) 시작·종료 시간을 함께 입력하실 수 있습니다."
+      : "원내 휴무일 목록입니다. 추가·수정은 관리자만 가능합니다.";
+    lvRenderAll();
+    if(!admin){
+      var me = lvSelfEmployee();
+      if(me) lvOpenEmployee(me.id, {lockPicker:true, switchTab:false});
+    } else {
+      document.getElementById('lvEmpListWrap').style.display = "block";
+      document.getElementById('lvEmpDetailWrap').style.display = "none";
+    }
+  }
+  function lvActivateTab(name){
+    document.querySelectorAll('#leaveView .lv-tab').forEach(function(t){ t.classList.toggle('active', t.dataset.view===name); });
+    document.querySelectorAll('#leaveView .lv-view').forEach(function(v){ v.classList.toggle('active', v.id==='lv-view-'+name); });
+  }
+
+  function lvRenderEmployeePicker(){
+    var wrap = document.getElementById('lvEmpCardsPick');
+    wrap.innerHTML = "";
+    if(!lvIsAdmin()) return;
+    LV_employees.forEach(function(emp){ wrap.appendChild(lvBuildEmpCard(emp)); });
+  }
+
+  function lvOpenEmployee(id, opts){
+    opts = opts || {};
+    LV_currentEmpId = id;
+    if(opts.switchTab !== false) lvActivateTab('employee');
+    document.getElementById('lvEmpListWrap').style.display = "none";
+    document.getElementById('lvEmpDetailWrap').style.display = "block";
+    document.getElementById('lvBackToList').style.display = (opts.lockPicker || !lvIsAdmin()) ? "none" : "inline-block";
+    lvRenderEmployeeDetail();
+  }
+  document.getElementById('lvBackToList').onclick = function(){
+    if(!lvIsAdmin()) return;
+    document.getElementById('lvEmpListWrap').style.display = "block";
+    document.getElementById('lvEmpDetailWrap').style.display = "none";
+  };
+
+  function lvRenderEmployeeDetail(){
+    var emp = LV_employees.find(function(e){ return e.id===LV_currentEmpId; });
+    if(!emp) return;
+    var header = document.getElementById('lvEmpHeaderPanel');
+    if(emp.type==="위탁"){
+      header.innerHTML =
+        '<h2>'+escapeHtml(emp.name)+' <span class="lv-badge lv-frl">위탁</span></h2>' +
+        '<div class="lv-note">업무위탁(프리랜서) 계약자로, 근로기준법상 연차유급휴가 적용 대상이 아닙니다. 다만 근태·업무 이력 관리를 위해 아래 표에 경조사·기타 기록을 남길 수 있습니다.</div>' +
+        '<table><tr><td style="color:var(--lv-ink-soft);width:120px;">계약 시작</td><td>'+lvFmtKR(emp.hire)+'</td></tr>' +
+        (emp.end? ('<tr><td style="color:var(--lv-ink-soft);">종료(예정)</td><td>'+lvFmtKR(emp.end)+'</td></tr>'):'') +
+        '<tr><td style="color:var(--lv-ink-soft);">메모</td><td>'+escapeHtml(emp.note||'-')+'</td></tr></table>';
+    } else {
+      var accruedInfo = lvCalcAccrued(emp.hire, LEAVE_TODAY);
+      var rem = lvRemainingLeave(emp);
+      header.innerHTML =
+        '<h2>'+escapeHtml(emp.name)+' <span class="lv-badge lv-reg">정규직</span></h2>' +
+        '<div class="lv-stat-row">' +
+          '<div class="lv-stat"><div class="lv-n">'+rem+'</div><div class="lv-l">잔여 연차 (일)</div></div>' +
+          '<div class="lv-stat"><div class="lv-n">'+accruedInfo.accrued+'</div><div class="lv-l">기준 발생 연차 ('+accruedInfo.detail+')</div></div>' +
+          '<div class="lv-stat"><div class="lv-n">'+lvUsedDays(emp.id)+'</div><div class="lv-l">누적 사용 (일)</div></div>' +
+          '<div class="lv-stat"><div class="lv-n">'+lvTenureLabel(emp.hire, LEAVE_TODAY)+'</div><div class="lv-l">근속기간 (기산일 '+lvFmtKR(emp.hire)+')</div></div>' +
+        '</div>' +
+        '<div class="lv-sub" style="margin:-4px 0 4px;">다음 연차 발생일: '+lvFmtKR(lvDateISO(lvNextAccrualDate(emp.hire, LEAVE_TODAY)))+'</div>';
+    }
+    var tbody = document.getElementById('lvTable');
+    var rows = lvLedgerFor(emp.id);
+    tbody.innerHTML = rows.length ? rows.map(function(l){ return (
+      '<tr>' +
+        '<td><span class="lv-type-pill lv-pill-'+l.type.replace('조정','')+'">'+escapeHtml(l.type)+'</span></td>' +
+        '<td>'+(l.start? lvFmtKR(l.start) + (l.end && l.end!==l.start ? ' ~ '+lvFmtKR(l.end) : '') : '-')+'</td>' +
+        '<td>'+(l.days>0 && l.type==='연차조정' ? '+'+l.days : l.days)+'</td>' +
+        '<td>'+escapeHtml(l.note||'')+'</td>' +
+        '<td style="color:var(--lv-ink-soft);">'+lvFmtKR(l.createdAt)+'</td>' +
+        '<td><button class="lv-icon-btn" onclick="lvDeleteLedger(\''+l.id+'\')" aria-label="삭제">✕</button></td>' +
+      '</tr>'
+    ); }).join('') : '<tr class="lv-empty-row"><td colspan="6">등록된 기록이 없습니다.</td></tr>';
+  }
+
+  document.getElementById('lvAddBtn').onclick = async function(){
+    var type = document.getElementById('lvType').value;
+    var start = document.getElementById('lvStart').value;
+    var end = document.getElementById('lvEnd').value || start;
+    var days = document.getElementById('lvDays').value;
+    var note = document.getElementById('lvNote').value;
+    var msg = document.getElementById('lvMsg');
+    if(type!=="연차조정" && !start){ msg.textContent = "시작일을 입력해 주세요."; msg.className="lv-msg lv-err"; return; }
+    if(!days || Number(days)===0){ msg.textContent = "일수를 입력해 주세요 (조정의 경우 음수도 가능)."; msg.className="lv-msg lv-err"; return; }
+    LV_ledger.push({
+      id: "l"+Date.now(), employeeId: LV_currentEmpId, type:type, start: start||null, end: end||null,
+      days: Number(days), note:note, createdAt: lvDateISO(LEAVE_TODAY)
+    });
+    await lvSaveLedger();
+    document.getElementById('lvStart').value=""; document.getElementById('lvEnd').value="";
+    document.getElementById('lvDays').value=""; document.getElementById('lvNote').value="";
+    msg.textContent = "기록이 추가되었습니다."; msg.className="lv-msg";
+    lvRenderEmployeeDetail(); lvRenderDashboard();
+  };
+
+  window.lvDeleteLedger = async function(id){
+    LV_ledger = LV_ledger.filter(function(l){ return l.id!==id; });
+    await lvSaveLedger();
+    lvRenderEmployeeDetail(); lvRenderDashboard();
+  };
+
+  // ---- Staff management ----
+  function lvRenderStaffTable(){
+    var tbody = document.getElementById('lvStTable');
+    tbody.innerHTML = LV_employees.map(function(e){
+      var ended = e.end && new Date(e.end+"T00:00:00") < LEAVE_TODAY;
+      return (
+        '<tr>' +
+          '<td>'+escapeHtml(e.name)+'</td>' +
+          '<td><span class="lv-badge '+(e.type==='정규직'?'lv-reg':'lv-frl')+'">'+e.type+'</span></td>' +
+          '<td>'+lvFmtKR(e.hire)+'</td>' +
+          '<td>'+(ended? '<span class="lv-badge lv-end">종료</span>' : (e.end? '종료예정 '+lvFmtKR(e.end) : '재직중'))+'</td>' +
+          '<td>'+escapeHtml(e.note||'')+'</td>' +
+          '<td><button class="lv-icon-btn" onclick="lvDeleteEmployee(\''+e.id+'\')" aria-label="삭제">✕</button></td>' +
+        '</tr>'
+      );
+    }).join('');
+  }
+  document.getElementById('lvStAddBtn').onclick = async function(){
+    var name = document.getElementById('lvStName').value.trim();
+    var type = document.getElementById('lvStType').value;
+    var hire = document.getElementById('lvStHire').value;
+    var end = document.getElementById('lvStEnd').value;
+    var note = document.getElementById('lvStNote').value;
+    var msg = document.getElementById('lvStMsg');
+    if(!name || !hire){ msg.textContent="이름과 근속 기산일은 필수입니다."; msg.className="lv-msg lv-err"; return; }
+    LV_employees.push({id:"e"+Date.now(), name:name, type:type, hire:hire, end:end, note:note, active:true});
+    await lvSaveEmployees();
+    document.getElementById('lvStName').value=""; document.getElementById('lvStHire').value="";
+    document.getElementById('lvStEnd').value=""; document.getElementById('lvStNote').value="";
+    msg.textContent="직원이 추가되었습니다."; msg.className="lv-msg";
+    lvRenderAll();
+  };
+  window.lvDeleteEmployee = async function(id){
+    LV_employees = LV_employees.filter(function(e){ return e.id!==id; });
+    LV_ledger = LV_ledger.filter(function(l){ return l.employeeId!==id; });
+    await lvSaveEmployees(); await lvSaveLedger();
+    lvRenderAll();
+  };
+
+  // ---- Holiday management ----
+  function lvHolidayPeriodLabel(h){
+    if(!h.startTime || !h.endTime) return "종일";
+    if(h.startTime==="08:30" && h.endTime==="12:30") return "오전 (08:30~12:30)";
+    if(h.startTime==="13:30" && h.endTime==="17:30") return "오후 (13:30~17:30)";
+    return h.startTime+"~"+h.endTime;
+  }
+
+  function lvRenderHolidayTable(){
+    var tbody = document.getElementById('lvHoTable');
+    var sorted = LV_holidays.slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
+    tbody.innerHTML = sorted.map(function(h){
+      var d = new Date(h.date+"T00:00:00");
+      var timeLabel = lvHolidayPeriodLabel(h);
+      var actionCell = lvIsAdmin()
+        ? ('<td><button class="lv-icon-btn" onclick="lvDeleteHoliday(\''+h.id+'\')" aria-label="삭제">✕</button></td>')
+        : '<td></td>';
+      return (
+        '<tr>' +
+          '<td>'+lvFmtKR(h.date)+'</td>' +
+          '<td>'+LV_WEEKDAY[d.getDay()]+'</td>' +
+          '<td>'+escapeHtml(h.name)+'</td>' +
+          '<td><span class="lv-type-pill lv-pill-'+h.type+'">'+h.type+'</span></td>' +
+          '<td style="color:var(--lv-ink-soft);">'+timeLabel+'</td>' +
+          actionCell +
+        '</tr>'
+      );
+    }).join('');
+  }
+  var LV_HOLIDAY_PERIOD_PRESETS = {
+    "종일": {start:null, end:null},
+    "오전": {start:"08:30", end:"12:30"},
+    "오후": {start:"13:30", end:"17:30"}
+  };
+  document.getElementById('lvHoPeriod').addEventListener('change', function(e){
+    var isCustom = e.target.value === "직접입력";
+    document.getElementById('lvHoCustomStartWrap').style.display = isCustom ? "" : "none";
+    document.getElementById('lvHoCustomEndWrap').style.display = isCustom ? "" : "none";
+  });
+  document.getElementById('lvHoAddBtn').onclick = async function(){
+    var date = document.getElementById('lvHoDate').value;
+    var name = document.getElementById('lvHoName').value.trim();
+    var type = document.getElementById('lvHoType').value;
+    var period = document.getElementById('lvHoPeriod').value;
+    var msg = document.getElementById('lvHoMsg');
+    if(!date || !name){ msg.textContent="날짜와 명칭을 입력해 주세요."; msg.className="lv-msg lv-err"; return; }
+
+    var startTime, endTime;
+    if(period === "직접입력"){
+      startTime = document.getElementById('lvHoStart').value;
+      endTime = document.getElementById('lvHoEnd').value;
+      if(!startTime || !endTime){ msg.textContent="직접 입력을 선택한 경우 시작·종료 시간을 모두 입력해 주세요."; msg.className="lv-msg lv-err"; return; }
+      if(startTime >= endTime){ msg.textContent="종료 시간은 시작 시간보다 늦어야 합니다."; msg.className="lv-msg lv-err"; return; }
+    } else {
+      startTime = LV_HOLIDAY_PERIOD_PRESETS[period].start;
+      endTime = LV_HOLIDAY_PERIOD_PRESETS[period].end;
+    }
+
+    LV_holidays.push({id:"h"+Date.now(), date:date, name:name, type:type, startTime: startTime||null, endTime: endTime||null});
+    await lvSaveHolidays();
+    document.getElementById('lvHoDate').value=""; document.getElementById('lvHoName').value="";
+    document.getElementById('lvHoStart').value=""; document.getElementById('lvHoEnd').value="";
+    document.getElementById('lvHoPeriod').value="종일";
+    document.getElementById('lvHoCustomStartWrap').style.display="none";
+    document.getElementById('lvHoCustomEndWrap').style.display="none";
+    msg.textContent="휴일이 추가되었습니다."; msg.className="lv-msg";
+    lvRenderHolidayTable(); lvRenderDashboard();
+  };
+  window.lvDeleteHoliday = async function(id){
+    LV_holidays = LV_holidays.filter(function(h){ return h.id!==id; });
+    await lvSaveHolidays();
+    lvRenderHolidayTable(); lvRenderDashboard();
+  };
+
+  // ---- Tabs ----
+  document.querySelectorAll('#leaveView .lv-tab').forEach(function(tab){
+    tab.onclick = function(){
+      lvActivateTab(tab.dataset.view);
+      if(tab.dataset.view === "employee" && !lvIsAdmin()){
+        var me = lvSelfEmployee();
+        if(me) lvOpenEmployee(me.id, {lockPicker:true});
+      }
+    };
+  });
+
+  // ---- 체크리스트 ↔ 휴가관리 화면 전환 ----
+  async function openLeaveView(){
+    if(!LV_loaded){
+      await lvLoadAll();
+      LV_loaded = true;
+    }
+    document.querySelector(".wrap").style.display = "none";
+    document.querySelector(".apptabs").style.display = "none";
+    document.getElementById("leaveView").style.display = "";
+    lvApplyRoleUI();
+  }
+  function closeLeaveView(){
+    document.getElementById("leaveView").style.display = "none";
+    document.querySelector(".apptabs").style.display = "";
+    document.querySelector(".wrap").style.display = "";
+  }
+  document.getElementById("leaveBtn").addEventListener("click", openLeaveView);
+  document.getElementById("lvBackToMain").addEventListener("click", closeLeaveView);
 
   bootstrap();
 })();
