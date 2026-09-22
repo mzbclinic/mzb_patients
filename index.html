@@ -658,7 +658,8 @@
       <div class="lv-panel" id="lvEmpHeaderPanel"></div>
 
       <div class="lv-panel">
-        <h2>연차 사용 / 조정 기록 추가</h2>
+        <h2 id="lvPanelTitle">연차 사용 / 조정 기록 추가</h2>
+        <div class="lv-note lv-warn" id="lvCorrectionBanner" style="display:none;"></div>
         <div class="lv-field-row">
           <div class="lv-field"><label>구분</label>
             <select id="lvType">
@@ -956,121 +957,6 @@
   var K_ALL_STATES = "patient-states-all"; // 환자별 state:ID 키를 다 합쳐서 이 키 하나로 저장 (호출 횟수 절감)
   var K_MINT_CHECKERS = "mint-checkers"; // 간호사 명단과는 별개로, MINT 일방시를 체크하는 사회복지사 등의 명단
   var DEFAULT_MINT_CHECKERS = ["신현경"];
-
-  /* ================= 동시 편집 충돌 방지(3-way merge) =================
-     여러 직원이 동시에 접속해서 쓰는 앱이라, "환자 목록" 같은 걸 통째로 하나의
-     값으로 저장하면 이런 사고가 날 수 있습니다:
-       1) A가 접속 → 그 순간의 환자 78명 목록을 화면에 들고 있음
-       2) 그 사이 B가 새 환자를 등록 → 서버는 79명이 됨
-       3) A가 (새로고침 없이) 아무 환자나 하나 수정 → A가 들고 있던 예전
-          "78명짜리 전체 목록"을 그대로 다시 저장 → B가 추가한 79번째 환자가 사라짐
-     이를 막기 위해, 아래 키들은 저장 직전에 서버의 "지금 이 순간" 값을 한 번 더
-     확인해서, 그 사이 다른 사람이 추가/수정/삭제한 항목은 그대로 살리고 내가 지금
-     바꾼 항목만 얹어서 합친 뒤 저장합니다(3-way merge). 항목 구성(K_TEMPLATES)처럼
-     관리자 혼자 가끔 편집하는 항목은 충돌 위험이 낮아 이 대상에서 제외했습니다. */
-  function getMergeStrategy(key){
-    if(key === K_PATIENTS || key === K_CANDIDATES || key === K_BLOODTESTS) return "byId";
-    if(key === K_STAFF || key === K_MINT_CHECKERS) return "stringSet";
-    if(key === K_ALL_STATES) return "byMapKey";
-    if(key.indexOf("visits:") === 0) return "byId";
-    if(key === "leave-employees" || key === "leave-ledger" || key === "leave-holidays") return "byId";
-    return null;
-  }
-  var STORAGE_BASELINE = {}; // key -> 마지막으로 서버에서 읽어온 시점의 스냅샷(비교 기준선)
-  function deepClone(x){ return (x===null || typeof x==="undefined") ? x : JSON.parse(JSON.stringify(x)); }
-  function sameJSON(a,b){ return JSON.stringify(a) === JSON.stringify(b); }
-  function captureBaseline(key, value){
-    if(value !== null && getMergeStrategy(key)){ STORAGE_BASELINE[key] = deepClone(value); }
-  }
-  // id를 가진 배열(환자/대상자/혈액검사/방문기록)용 3-way merge.
-  // 규칙: 나만 바꾼 항목→내 것 유지, 남만 바꾼 항목→남의 것 유지(이게 핵심 버그 수정),
-  // 둘 다 바꾼 항목→내가 지금 한 조작 우선(단, 데이터가 사라지진 않음).
-  function mergeById(baseline, current, fresh){
-    baseline = baseline || []; current = current || []; fresh = fresh || [];
-    var baseMap = {}, curMap = {}, freshMap = {};
-    baseline.forEach(function(x){ if(x && x.id) baseMap[x.id] = x; });
-    current.forEach(function(x){ if(x && x.id) curMap[x.id] = x; });
-    fresh.forEach(function(x){ if(x && x.id) freshMap[x.id] = x; });
-    var order = [], seen = {};
-    fresh.forEach(function(x){ if(x && x.id && !seen[x.id]){ order.push(x.id); seen[x.id]=true; } });
-    current.forEach(function(x){ if(x && x.id && !seen[x.id]){ order.push(x.id); seen[x.id]=true; } });
-    var result = [];
-    order.forEach(function(id){
-      var inBase = baseMap.hasOwnProperty(id), inCur = curMap.hasOwnProperty(id), inFresh = freshMap.hasOwnProperty(id);
-      if(inCur && !inBase && !inFresh){ result.push(curMap[id]); return; } // 내가 새로 추가
-      if(inFresh && !inBase && !inCur){ result.push(freshMap[id]); return; } // 남이 새로 추가
-      if(inCur && inFresh && !inBase){ result.push(curMap[id]); return; }
-      if(inBase && inCur && !inFresh){ // 남이 삭제함
-        if(sameJSON(baseMap[id], curMap[id])) return; // 나는 안 건드림 → 삭제 존중
-        result.push(curMap[id]); return; // 나는 수정했는데 남이 삭제 → 내 수정 보존
-      }
-      if(inBase && inFresh && !inCur){ // 내가 삭제함
-        if(sameJSON(baseMap[id], freshMap[id])) return; // 남도 안 건드림 → 내 삭제 그대로
-        result.push(freshMap[id]); return; // 남이 그 사이 수정 → 남의 수정 보존(삭제 취소)
-      }
-      if(inBase && inCur && inFresh){
-        var curChanged = !sameJSON(baseMap[id], curMap[id]);
-        var freshChanged = !sameJSON(baseMap[id], freshMap[id]);
-        if(!curChanged && !freshChanged){ result.push(baseMap[id]); return; }
-        if(curChanged && !freshChanged){ result.push(curMap[id]); return; }
-        if(!curChanged && freshChanged){ result.push(freshMap[id]); return; }
-        result.push(curMap[id]); return; // 둘 다 수정 → 지금 내 조작 우선
-      }
-    });
-    return result;
-  }
-  // 문자열 배열(간호사 명단, MINT 체크자 명단)용 merge: 집합 연산으로 처리
-  function mergeStringSet(baseline, current, fresh){
-    baseline = baseline || []; current = current || []; fresh = fresh || [];
-    var addedByUs = current.filter(function(x){ return baseline.indexOf(x) === -1; });
-    var removedByUs = baseline.filter(function(x){ return current.indexOf(x) === -1; });
-    var result = fresh.filter(function(x){ return removedByUs.indexOf(x) === -1; });
-    addedByUs.forEach(function(x){ if(result.indexOf(x) === -1) result.push(x); });
-    return result;
-  }
-  // 객체 맵(환자ID → 체크상태)용 merge: mergeById와 동일한 규칙을 키 단위로 적용
-  function mergeByMapKey(baseline, current, fresh){
-    baseline = baseline || {}; current = current || {}; fresh = fresh || {};
-    var keys = {};
-    Object.keys(current).forEach(function(k){ keys[k]=true; });
-    Object.keys(fresh).forEach(function(k){ keys[k]=true; });
-    var result = {};
-    Object.keys(keys).forEach(function(id){
-      var inBase = baseline.hasOwnProperty(id), inCur = current.hasOwnProperty(id), inFresh = fresh.hasOwnProperty(id);
-      if(inCur && !inBase && !inFresh){ result[id]=current[id]; return; }
-      if(inFresh && !inBase && !inCur){ result[id]=fresh[id]; return; }
-      if(inCur && inFresh && !inBase){ result[id]=current[id]; return; }
-      if(inBase && inCur && !inFresh){
-        if(sameJSON(baseline[id], current[id])) return;
-        result[id]=current[id]; return;
-      }
-      if(inBase && inFresh && !inCur){
-        if(sameJSON(baseline[id], fresh[id])) return;
-        result[id]=fresh[id]; return;
-      }
-      if(inBase && inCur && inFresh){
-        var curChanged = !sameJSON(baseline[id], current[id]);
-        var freshChanged = !sameJSON(baseline[id], fresh[id]);
-        if(!curChanged && !freshChanged){ result[id]=baseline[id]; return; }
-        if(curChanged && !freshChanged){ result[id]=current[id]; return; }
-        if(!curChanged && freshChanged){ result[id]=fresh[id]; return; }
-        result[id]=current[id]; return;
-      }
-    });
-    return result;
-  }
-  // merge 결과를 (같은 배열/객체 참조를 유지한 채) 그 자리에서 반영합니다.
-  // → 화면 코드가 들고 있는 S.patients 등의 참조가 자동으로 최신 합본을 가리키게 됩니다.
-  function applyMergedInPlace(target, merged){
-    if(Array.isArray(target) && Array.isArray(merged)){
-      target.length = 0;
-      merged.forEach(function(x){ target.push(x); });
-    } else if(target && typeof target === "object" && merged && typeof merged === "object"){
-      Object.keys(target).forEach(function(k){ delete target[k]; });
-      Object.keys(merged).forEach(function(k){ target[k] = merged[k]; });
-    }
-  }
-
   function stateKey(pid){ return "state:" + pid; }
   async function saveAllPatientStates(){
     return await storageSet(K_ALL_STATES, S.patientStates, true);
@@ -1153,6 +1039,114 @@
     return monthKey(d.getFullYear(), d.getMonth()+1);
   })();
 
+  /* ================= 동시 편집 충돌 방지(3-way merge) =================
+     여러 직원이 동시에 접속해서 쓰는 앱이라, "환자 목록" 같은 걸 통째로 하나의
+     값으로 저장하면 이런 사고가 날 수 있습니다:
+       1) A가 접속 → 그 순간의 환자 78명 목록을 화면에 들고 있음
+       2) 그 사이 B가 새 환자를 등록 → 서버는 79명이 됨
+       3) A가 (새로고침 없이) 아무 환자나 하나 수정 → A가 들고 있던 예전
+          "78명짜리 전체 목록"을 그대로 다시 저장 → B가 추가한 79번째 환자가 사라짐
+     이를 막기 위해, 아래 키들은 저장 직전에 서버의 "지금 이 순간" 값을 한 번 더
+     확인해서, 그 사이 다른 사람이 추가/수정/삭제한 항목은 그대로 살리고 내가 지금
+     바꾼 항목만 얹어서 합친 뒤 저장합니다(3-way merge). 항목 구성(K_TEMPLATES)처럼
+     관리자 혼자 가끔 편집하는 항목은 충돌 위험이 낮아 이 대상에서 제외했습니다. */
+  function getMergeStrategy(key){
+    if(key === K_PATIENTS || key === K_CANDIDATES || key === K_BLOODTESTS) return "byId";
+    if(key === K_STAFF || key === K_MINT_CHECKERS) return "stringSet";
+    if(key === K_ALL_STATES) return "byMapKey";
+    if(key.indexOf("visits:") === 0) return "byId";
+    if(key === "leave-employees" || key === "leave-ledger" || key === "leave-holidays") return "byId";
+    return null;
+  }
+  var STORAGE_BASELINE = {}; // key -> 마지막으로 서버에서 읽어온 시점의 스냅샷(비교 기준선)
+  function deepClone(x){ return (x===null || typeof x==="undefined") ? x : JSON.parse(JSON.stringify(x)); }
+  function sameJSON(a,b){ return JSON.stringify(a) === JSON.stringify(b); }
+  function captureBaseline(key, value){
+    if(value !== null && getMergeStrategy(key)){ STORAGE_BASELINE[key] = deepClone(value); }
+  }
+  // id를 가진 배열(환자/대상자/혈액검사/방문기록)용 3-way merge.
+  function mergeById(baseline, current, fresh){
+    baseline = baseline || []; current = current || []; fresh = fresh || [];
+    var baseMap = {}, curMap = {}, freshMap = {};
+    baseline.forEach(function(x){ if(x && x.id) baseMap[x.id] = x; });
+    current.forEach(function(x){ if(x && x.id) curMap[x.id] = x; });
+    fresh.forEach(function(x){ if(x && x.id) freshMap[x.id] = x; });
+    var order = [], seen = {};
+    fresh.forEach(function(x){ if(x && x.id && !seen[x.id]){ order.push(x.id); seen[x.id]=true; } });
+    current.forEach(function(x){ if(x && x.id && !seen[x.id]){ order.push(x.id); seen[x.id]=true; } });
+    var result = [];
+    order.forEach(function(id){
+      var inBase = baseMap.hasOwnProperty(id), inCur = curMap.hasOwnProperty(id), inFresh = freshMap.hasOwnProperty(id);
+      if(inCur && !inBase && !inFresh){ result.push(curMap[id]); return; }
+      if(inFresh && !inBase && !inCur){ result.push(freshMap[id]); return; }
+      if(inCur && inFresh && !inBase){ result.push(curMap[id]); return; }
+      if(inBase && inCur && !inFresh){
+        if(sameJSON(baseMap[id], curMap[id])) return;
+        result.push(curMap[id]); return;
+      }
+      if(inBase && inFresh && !inCur){
+        if(sameJSON(baseMap[id], freshMap[id])) return;
+        result.push(freshMap[id]); return;
+      }
+      if(inBase && inCur && inFresh){
+        var curChanged = !sameJSON(baseMap[id], curMap[id]);
+        var freshChanged = !sameJSON(baseMap[id], freshMap[id]);
+        if(!curChanged && !freshChanged){ result.push(baseMap[id]); return; }
+        if(curChanged && !freshChanged){ result.push(curMap[id]); return; }
+        if(!curChanged && freshChanged){ result.push(freshMap[id]); return; }
+        result.push(curMap[id]); return;
+      }
+    });
+    return result;
+  }
+  function mergeStringSet(baseline, current, fresh){
+    baseline = baseline || []; current = current || []; fresh = fresh || [];
+    var addedByUs = current.filter(function(x){ return baseline.indexOf(x) === -1; });
+    var removedByUs = baseline.filter(function(x){ return current.indexOf(x) === -1; });
+    var result = fresh.filter(function(x){ return removedByUs.indexOf(x) === -1; });
+    addedByUs.forEach(function(x){ if(result.indexOf(x) === -1) result.push(x); });
+    return result;
+  }
+  function mergeByMapKey(baseline, current, fresh){
+    baseline = baseline || {}; current = current || {}; fresh = fresh || {};
+    var keys = {};
+    Object.keys(current).forEach(function(k){ keys[k]=true; });
+    Object.keys(fresh).forEach(function(k){ keys[k]=true; });
+    var result = {};
+    Object.keys(keys).forEach(function(id){
+      var inBase = baseline.hasOwnProperty(id), inCur = current.hasOwnProperty(id), inFresh = fresh.hasOwnProperty(id);
+      if(inCur && !inBase && !inFresh){ result[id]=current[id]; return; }
+      if(inFresh && !inBase && !inCur){ result[id]=fresh[id]; return; }
+      if(inCur && inFresh && !inBase){ result[id]=current[id]; return; }
+      if(inBase && inCur && !inFresh){
+        if(sameJSON(baseline[id], current[id])) return;
+        result[id]=current[id]; return;
+      }
+      if(inBase && inFresh && !inCur){
+        if(sameJSON(baseline[id], fresh[id])) return;
+        result[id]=fresh[id]; return;
+      }
+      if(inBase && inCur && inFresh){
+        var curChanged = !sameJSON(baseline[id], current[id]);
+        var freshChanged = !sameJSON(baseline[id], fresh[id]);
+        if(!curChanged && !freshChanged){ result[id]=baseline[id]; return; }
+        if(curChanged && !freshChanged){ result[id]=current[id]; return; }
+        if(!curChanged && freshChanged){ result[id]=fresh[id]; return; }
+        result[id]=current[id]; return;
+      }
+    });
+    return result;
+  }
+  function applyMergedInPlace(target, merged){
+    if(Array.isArray(target) && Array.isArray(merged)){
+      target.length = 0;
+      merged.forEach(function(x){ target.push(x); });
+    } else if(target && typeof target === "object" && merged && typeof merged === "object"){
+      Object.keys(target).forEach(function(k){ delete target[k]; });
+      Object.keys(merged).forEach(function(k){ target[k] = merged[k]; });
+    }
+  }
+
   /* ================= 저장소 =================
      공유 데이터(shared=true)는 구글시트(전 직원 공유)에,
      개인 기기 설정(shared=false, 예: 마지막으로 선택한 담당자)은
@@ -1174,13 +1168,10 @@
     }catch(e){ return null; }
   }
   // 짧게 기다렸다가 한 번만 더 시도하는 저장 전용 래퍼입니다.
-  // 구글 Apps Script는 순간적으로 바쁘거나(동시 잠금 대기, 일시적 오류) 실패할 때가 있는데,
-  // 그때 바로 포기하지 말고 0.7초 후 한 번만 더 시도하면 대부분 성공합니다.
   async function apiCallWithRetry(action, params){
     try{
       var r = await apiCall(action, params);
       if(r && (r.ok || r.error === "auth")) return r;
-      // ok:false(인증 오류 제외)면 한 번 더 시도
     }catch(e){ /* 아래에서 재시도 */ }
     await new Promise(function(resolve){ setTimeout(resolve, 700); });
     try{
@@ -1211,8 +1202,6 @@
       return false;
     }
   }
-  // 충돌 안전 저장: 저장 직전 서버 최신값을 다시 읽어와서 merge한 뒤 저장하고,
-  // 화면이 들고 있는 값도 합쳐진 최종 결과로 갱신합니다.
   async function mergeSaveOne(key, value, strategy){
     try{
       var baseline = STORAGE_BASELINE.hasOwnProperty(key) ? STORAGE_BASELINE[key] : (strategy === "byMapKey" ? {} : []);
@@ -1251,13 +1240,9 @@
     try{
       var r = await apiCall("kv_list", { prefix: prefix || "" });
       if(!r || !r.ok){ handleApiError(r); return null; }
-      return r; // { ok:true, keys:[...] }
+      return r;
     }catch(e){ return null; }
   }
-  // 서로 무관한 여러 shared 키를 한 번의 API 호출로 모아서 읽어옵니다.
-  // (Apps Script는 요청 하나마다 스프레드시트를 여는 비용이 있어서,
-  //  Promise.all로 여러 개를 "동시에" 보내는 것보다 이렇게 "한 번에 묶어서" 보내는 편이
-  //  더 빠르고, Apps Script의 동시 실행 제한 문제에서도 자유롭습니다.)
   async function storageGetMany(keys){
     var out = {};
     keys.forEach(function(k){ out[k] = null; });
@@ -1273,9 +1258,6 @@
       return out;
     }catch(e){ return out; }
   }
-  // 이번 로드에서 실제로 바뀐 shared 키들을 저장합니다. 병합 대상 키는 개별적으로
-  // 충돌 안전 저장을 거치고, 나머지는 예전처럼 한 번의 API 호출로 묶어서 저장합니다.
-  // (이 경로는 최초 실행/마이그레이션 때만 드물게 타는 경로라 약간의 추가 호출은 괜찮습니다.)
   async function storageSetMany(pairs){
     if(!pairs.length) return true;
     try{
@@ -1305,7 +1287,6 @@
       return false;
     }
   }
-  // 로그인 세션이 만료/무효화된 경우 로그인 화면으로 되돌립니다.
   function handleApiError(r){
     if(r && r.error === "auth"){
       saveSession(null);
@@ -1391,14 +1372,13 @@
     var currentVisitKey = visitStateKey(S.visitLogYear, S.visitLogMonth);
 
     // 서로 무관한 조회들을 한 번의 API 호출로 묶어서 요청합니다(kv_get_many).
-    // 예전에는 이 8개를 하나씩 순서대로 기다렸는데(초기 로딩이 느렸던 핵심 원인),
     // Promise.all로 "동시에" 여러 번 보내는 방법도 가능하지만, 구글시트/Apps Script는
     // 요청 하나마다 스프레드시트를 여는 비용이 있고 동시 실행 제한도 있어서,
     // 이렇게 한 번의 호출(kv_get_many)로 묶는 편이 더 빠르고 안전합니다.
     // (K_LAST_NAME은 기기 로컬 설정이라 네트워크 호출 없이 즉시 가져옵니다.)
     var sharedKeys = [K_TEMPLATES, K_STAFF, K_PATIENTS, K_ALL_STATES, K_CANDIDATES, K_BLOODTESTS, currentVisitKey, K_MIGRATIONS_DONE, K_MINT_CHECKERS];
     var sharedResults = await storageGetMany(sharedKeys);
-    renderPreviewBanner(); // 자동로그인(기억된 세션) 경로는 이 시점에야 실제 서버 연결 여부가 드러납니다.
+    renderPreviewBanner(); // 자동로그인(기억된 세션) 경로는 이 시점에야 실제 서버 연결 여부가 드러남
     var lastName = await storageGet(K_LAST_NAME, false);
 
     S.templates = sharedResults[K_TEMPLATES];
@@ -1440,8 +1420,7 @@
       if(typeof p.name !== "string"){ p.name = p.name ? String(p.name) : ""; patientsChanged = true; }
     });
 
-    // 실제 로그인(PIN 인증)된 이름을 기본값으로 사용합니다. (예전의 "마지막 선택 이름 자동적용" 방식은 더 이상 신원 판단에 쓰지 않음)
-    S.who = (SESSION && SESSION.name) ? SESSION.name : ((lastName && (lastName === "전체" || S.staff.indexOf(lastName) !== -1)) ? lastName : "전체");
+    S.who = (lastName && (lastName === "전체" || S.staff.indexOf(lastName) !== -1)) ? lastName : "전체";
 
     // 환자별 상태: 통합 키가 있으면 그대로 사용. 없는(이관 전) 경우에만 예전 방식으로 1회 개별 조회.
     if(allStates && typeof allStates === "object"){
@@ -1479,6 +1458,9 @@
     // 누락됩니다. 담당간호사가 있던 환자는 계속 담당환자로 인정되도록 한 번만 보정합니다.
     await migratePatientFreqBackfill();
 
+    // 방문목록 LAB 체크로 자동 생성되던 혈액검사 기록이 중복 생성된 경우를 한 번 정리합니다.
+    await dedupeAutoBloodTests();
+
     // 1회성 마이그레이션들 (동의서 필수화, 김혜경 임포트, 대상자 백필, 전체명단 임포트, 등록날짜 갱신)
     // 예전에는 이 5개의 완료여부를 매번 각각 확인했지만, 이제 통합 플래그 1개로 한 번만 확인합니다.
     // (이미 다 완료된 상태라면 이 블록 전체가 통째로 건너뛰어집니다.)
@@ -1491,7 +1473,6 @@
       await storageSet(K_MIGRATIONS_DONE, true, true);
     }
 
-    // 이번 로드에서 실제로 바뀐 것만 모아서 한 번에(병렬) 저장합니다.
     // 이번 로드에서 실제로 바뀐 것만 모아서 한 번의 API 호출(kv_set_many)로 저장합니다.
     var writePairs = [];
     if(templatesChanged) writePairs.push({ key: K_TEMPLATES, value: S.templates });
@@ -1514,7 +1495,7 @@
     return Array.isArray(list) ? list : [];
   }
   async function saveVisitsForMonth(y, m, list){
-    await storageSet(visitStateKey(y, m), list, true);
+    return await storageSet(visitStateKey(y, m), list, true);
   }
   function updateVisitsTabLabel(){
     var btn = document.getElementById("tabVisits");
@@ -1622,6 +1603,43 @@
 
     if(changed){
       await storageSet(K_PATIENTS, S.patients, true);
+    }
+    await storageSet(flagKey, true, true);
+  }
+
+  // "방문목록에서 LAB 체크 → 자동 등록" 기능이 같은 방문을 두 번 등록해버리는 경우가 있었던 걸
+  // 한 번만 정리합니다. 같은 환자번호·같은 처방일자·유형 "방문"인 기록이 여러 개면 가장 먼저
+  // 생긴 것만 남기고 나머지는 지웁니다(체크된 결과통보/비고가 있으면 그쪽을 우선 보존).
+  async function dedupeAutoBloodTests(){
+    var flagKey = "migration-dedupe-blood-tests";
+    var already = await storageGet(flagKey, true);
+    if(already) return;
+
+    var groups = {};
+    S.bloodTests.forEach(function(b){
+      if(b.type !== "방문") return;
+      var key = String(b.no) + "|" + b.prescribedDate;
+      if(!groups[key]) groups[key] = [];
+      groups[key].push(b);
+    });
+
+    var toRemove = {};
+    Object.keys(groups).forEach(function(key){
+      var list = groups[key];
+      if(list.length < 2) return;
+      // 결과통보가 되었거나 비고가 있는 쪽을 우선 보존하고, 그다음은 가장 먼저 생긴 것을 보존합니다.
+      list.sort(function(a,b){
+        var aInfo = (a.resultStatus === "결과통보" ? 1 : 0) + (a.note ? 1 : 0);
+        var bInfo = (b.resultStatus === "결과통보" ? 1 : 0) + (b.note ? 1 : 0);
+        if(aInfo !== bInfo) return bInfo - aInfo;
+        return (a.createdAt||"").localeCompare(b.createdAt||"");
+      });
+      list.slice(1).forEach(function(dup){ toRemove[dup.id] = true; });
+    });
+
+    if(Object.keys(toRemove).length > 0){
+      S.bloodTests = S.bloodTests.filter(function(b){ return !toRemove[b.id]; });
+      await storageSet(K_BLOODTESTS, S.bloodTests, true);
     }
     await storageSet(flagKey, true, true);
   }
@@ -2918,7 +2936,7 @@
         if(!v) return;
         v.mintVisit = e.target.checked;
         if(v.mintVisit){
-          v.mintCheckedBy = (SESSION && SESSION.name) ? SESSION.name : (S.who || "미지정");
+          v.mintCheckedBy = S.who || "미지정";
         } else {
           delete v.mintCheckedBy;
         }
@@ -2977,10 +2995,11 @@
         var v = S.visits.find(function(x){ return x.id === vid; });
         if(!v) return;
         v.bloodTest = e.target.checked;
-        await saveVisitsForMonth(S.visitLogYear, S.visitLogMonth, S.visits);
+        var okSave = await saveVisitsForMonth(S.visitLogYear, S.visitLogMonth, S.visits);
+        if(!okSave) return; // storageSet이 이미 실패 토스트를 띄웠으므로 여기서 멈춤 (체크박스 표시는 이미 바뀐 상태이니 다시 눌러 재시도 필요)
         if(v.bloodTest){
-          await ensureBloodTestForVisit(v);
-          showToast("혈액검사 체크되어 혈액검사 탭에 등록되었습니다.");
+          var okBlood = await ensureBloodTestForVisit(v);
+          if(okBlood){ showToast("혈액검사 체크되어 혈액검사 탭에 등록되었습니다."); }
         } else {
           showToast("혈액검사 체크 해제되었습니다.");
         }
@@ -3078,10 +3097,11 @@
 
     if(editing){
       document.getElementById("vDelete").onclick = async function(){
-        var ok = await showConfirm("이 방문 기록을 삭제할까요?");
-        if(!ok) return;
+        var confirmed = await showConfirm("이 방문 기록을 삭제할까요?");
+        if(!confirmed) return;
         S.visits = S.visits.filter(function(v){ return v.id !== editing.id; });
-        await saveVisitsForMonth(editingYear, editingMonth, S.visits);
+        var okDel = await saveVisitsForMonth(editingYear, editingMonth, S.visits);
+        if(!okDel) return; // storageSet이 이미 실패 토스트를 띄웠으므로 여기서 멈춤 (모달은 열어둠)
         S.visitsCache[monthKey(editingYear, editingMonth)] = S.visits;
         var delSyncTarget = getSyncTargetForVisitType(editing.visitType);
         if(delSyncTarget){
@@ -3118,29 +3138,37 @@
       record.no = no; record.name = name; record.date = date; record.visitNo = visitNo;
       record.visitType = visitType; record.nurse = nurse; record.memo = memo; record.note = note;
 
+      var allOk = true;
       if(editing){
         if(targetYear !== editingYear || targetMonth !== editingMonth){
           // 날짜를 다른 달로 바꾼 경우: 기존 달 목록에서 빼고 새 달 목록으로 이동
           var remaining = S.visits.filter(function(v){ return v.id !== editing.id; });
-          await saveVisitsForMonth(editingYear, editingMonth, remaining);
+          if(!(await saveVisitsForMonth(editingYear, editingMonth, remaining))) allOk = false;
           S.visitsCache[monthKey(editingYear, editingMonth)] = remaining;
           if(editingYear === S.visitLogYear && editingMonth === S.visitLogMonth){ S.visits = remaining; }
           var otherList = (targetYear === S.visitLogYear && targetMonth === S.visitLogMonth) ? S.visits : await loadVisitsForMonth(targetYear, targetMonth);
           otherList.push(record);
-          await saveVisitsForMonth(targetYear, targetMonth, otherList);
+          if(!(await saveVisitsForMonth(targetYear, targetMonth, otherList))) allOk = false;
           S.visitsCache[monthKey(targetYear, targetMonth)] = otherList;
           if(targetYear === S.visitLogYear && targetMonth === S.visitLogMonth){ S.visits = otherList; }
         } else {
-          await saveVisitsForMonth(editingYear, editingMonth, S.visits);
+          if(!(await saveVisitsForMonth(editingYear, editingMonth, S.visits))) allOk = false;
           S.visitsCache[monthKey(editingYear, editingMonth)] = S.visits;
         }
       } else {
         var sameAsCurrent = (targetYear === S.visitLogYear && targetMonth === S.visitLogMonth);
         var list = sameAsCurrent ? S.visits : await loadVisitsForMonth(targetYear, targetMonth);
         list.push(record);
-        await saveVisitsForMonth(targetYear, targetMonth, list);
+        if(!(await saveVisitsForMonth(targetYear, targetMonth, list))) allOk = false;
         S.visitsCache[monthKey(targetYear, targetMonth)] = list;
         if(sameAsCurrent){ S.visits = list; }
+      }
+
+      if(!allOk){
+        // storageSet이 이미 실패 토스트를 띄웠으므로, 여기서 성공 메세지로 덮어쓰지 않습니다.
+        var vSaveBtn = document.getElementById("vSave");
+        if(vSaveBtn){ vSaveBtn.disabled = false; vSaveBtn.textContent = editing ? "저장" : "등록"; }
+        return;
       }
 
       closeModal();
@@ -3184,8 +3212,17 @@
 
   // 방문목록에서 혈액검사가 체크된 방문에 대해, 아직 혈액검사 목록에 없으면 자동으로 만들어줍니다.
   async function ensureBloodTestForVisit(visit){
-    var exists = S.bloodTests.find(function(b){ return b.linkedVisitId === visit.id; });
-    if(exists) return;
+    // linkedVisitId로만 매칭하면, 어떤 이유로든(연달아 빠르게 체크 해제/재체크하는 등) 그 값이
+    // 어긋나는 경우 같은 방문에 대해 중복으로 하나 더 생길 수 있습니다. 같은 환자·같은 날짜의
+    // "방문" 유형 기록이 이미 있으면 그것도 같은 건으로 보고, 연결 정보만 보강합니다.
+    var exists = S.bloodTests.find(function(b){
+      if(b.linkedVisitId === visit.id) return true;
+      return b.type === "방문" && String(b.no) === String(visit.no) && b.prescribedDate === visit.date;
+    });
+    if(exists){
+      if(!exists.linkedVisitId){ exists.linkedVisitId = visit.id; return await storageSet(K_BLOODTESTS, S.bloodTests, true); }
+      return true;
+    }
     S.bloodTests.push({
       id: uid("b"),
       prescribedDate: visit.date,
@@ -3198,7 +3235,7 @@
       identifier: makeBloodTestIdentifier(visit.name, visit.date),
       createdAt: todayStr()
     });
-    await storageSet(K_BLOODTESTS, S.bloodTests, true);
+    return await storageSet(K_BLOODTESTS, S.bloodTests, true);
   }
 
   function getNurseForNo(no){
@@ -3338,10 +3375,11 @@
     document.getElementById("bCancel").onclick = closeModal;
     if(editing){
       document.getElementById("bDelete").onclick = async function(){
-        var ok = await showConfirm("이 혈액검사 기록을 삭제할까요?");
-        if(!ok) return;
+        var confirmed = await showConfirm("이 혈액검사 기록을 삭제할까요?");
+        if(!confirmed) return;
         S.bloodTests = S.bloodTests.filter(function(x){ return x.id !== editing.id; });
-        await storageSet(K_BLOODTESTS, S.bloodTests, true);
+        var okDel = await storageSet(K_BLOODTESTS, S.bloodTests, true);
+        if(!okDel) return;
         closeModal();
         showToast("삭제되었습니다.");
         renderAll();
@@ -3372,7 +3410,8 @@
           identifier:identifier, createdAt: todayStr()
         });
       }
-      await storageSet(K_BLOODTESTS, S.bloodTests, true);
+      var ok = await storageSet(K_BLOODTESTS, S.bloodTests, true);
+      if(!ok) return; // storageSet이 이미 실패 토스트를 띄웠으므로 창을 그대로 두고 다시 시도하게 함
       closeModal();
       showToast(editing ? "수정되었습니다." : "등록되었습니다.");
       renderAll();
@@ -3732,8 +3771,7 @@
     var st = ensurePatientState(pid);
     if(!st.items[key]) st.items[key] = {};
     if(checked){
-      var byName = (SESSION && SESSION.name) ? SESSION.name : (S.who || "미지정");
-      st.items[key][mkey] = { checked:true, date: todayStr(), by: byName };
+      st.items[key][mkey] = { checked:true, date: todayStr(), by: S.who || "미지정" };
     } else {
       delete st.items[key][mkey];
     }
@@ -4540,12 +4578,13 @@
         ev.stopPropagation();
         var pid = el.getAttribute("data-pid");
         var p = S.patients.find(function(x){ return x.id===pid; });
-        var ok = await showConfirm((p?p.name:"") + " 환자를 삭제하시겠습니까? 체크 기록도 함께 삭제됩니다.");
-        if(ok){
+        var confirmed = await showConfirm((p?p.name:"") + " 환자를 삭제하시겠습니까? 체크 기록도 함께 삭제됩니다.");
+        if(confirmed){
           S.patients = S.patients.filter(function(x){ return x.id!==pid; });
-          await storageSet(K_PATIENTS, S.patients, true);
+          var ok1 = await storageSet(K_PATIENTS, S.patients, true);
           delete S.patientStates[pid];
-          await saveAllPatientStates();
+          var ok2 = await saveAllPatientStates();
+          if(!ok1 || !ok2) return; // storageSet이 이미 실패 토스트를 띄웠으므로 여기서 멈춤
           renderAll();
           showToast("삭제되었습니다.");
         }
@@ -5067,18 +5106,20 @@
     document.getElementById("pCancel").onclick = closeModal;
     if(editing){
       document.getElementById("pDelete").onclick = async function(){
-        var ok = await showConfirm(curName + " 님을 삭제하시겠습니까? 대상자·환자배정·체크 기록이 모두 삭제됩니다.");
-        if(!ok) return;
+        var confirmed = await showConfirm(curName + " 님을 삭제하시겠습니까? 대상자·환자배정·체크 기록이 모두 삭제됩니다.");
+        if(!confirmed) return;
+        var allOkDel = true;
         if(patient){
           S.patients = S.patients.filter(function(x){ return x.id !== patient.id; });
           delete S.patientStates[patient.id];
-          await saveAllPatientStates();
-          await storageSet(K_PATIENTS, S.patients, true);
+          if(!(await saveAllPatientStates())) allOkDel = false;
+          if(!(await storageSet(K_PATIENTS, S.patients, true))) allOkDel = false;
         }
         if(candidate){
           S.candidates = S.candidates.filter(function(x){ return x.id !== candidate.id; });
-          await storageSet(K_CANDIDATES, S.candidates, true);
+          if(!(await storageSet(K_CANDIDATES, S.candidates, true))) allOkDel = false;
         }
+        if(!allOkDel) return; // storageSet이 이미 실패 토스트를 띄웠으므로 여기서 멈춤
         closeModal();
         showToast("삭제되었습니다.");
         renderAll();
@@ -5158,9 +5199,18 @@
 
       // 3) 저장 호출은 딱 필요한 만큼만, 한 번씩만 순서대로 보냅니다 (직전 버전은 같은 저장을
       //    한 번의 클릭 안에서 최대 3번 연달아 호출해서, 저장 API 호출제한에 걸려 실패하는 경우가 있었습니다).
-      if(isNewPatient){ await saveAllPatientStates(); }
-      if(patientsChanged){ await storageSet(K_PATIENTS, S.patients, true); }
-      await storageSet(K_CANDIDATES, S.candidates, true);
+      var allOk = true;
+      if(isNewPatient){ if(!(await saveAllPatientStates())) allOk = false; }
+      if(patientsChanged){ if(!(await storageSet(K_PATIENTS, S.patients, true))) allOk = false; }
+      if(!(await storageSet(K_CANDIDATES, S.candidates, true))) allOk = false;
+
+      if(!allOk){
+        // storageSet이 이미 "저장에 실패했습니다" 토스트를 띄웠으므로, 여기서 "저장되었습니다"로
+        // 덮어써서 실패를 숨기면 안 됩니다. 창을 닫지 않고 그대로 두어 다시 시도할 수 있게 합니다.
+        saveBtn.disabled = false;
+        saveBtn.textContent = editing ? "저장" : "등록";
+        return;
+      }
 
       closeModal();
       showToast(editing ? "저장되었습니다." : "등록되었습니다.");
@@ -5340,7 +5390,8 @@
       if(!name) return;
       if(S.staff.indexOf(name) !== -1){ showToast("이미 있는 이름입니다."); return; }
       S.staff.push(name);
-      await storageSet(K_STAFF, S.staff, true);
+      var ok = await storageSet(K_STAFF, S.staff, true);
+      if(!ok) return; // storageSet이 이미 실패 토스트를 띄웠으므로 여기서 멈춤
       renderStaffEditorModal();
       showToast("추가되었습니다.");
     });
@@ -5378,12 +5429,13 @@
         var msg = count > 0
           ? (name + " 님에게 배정된 환자 " + count + "명이 \"미배정\" 상태로 바뀝니다. 삭제할까요?")
           : (name + " 님을 명단에서 삭제할까요?");
-        var ok = await showConfirm(msg);
-        if(!ok) return;
+        var confirmed = await showConfirm(msg);
+        if(!confirmed) return;
         S.staff.splice(idx, 1);
         S.patients.forEach(function(p){ if(p.nurse === name) p.nurse = ""; });
-        await storageSet(K_STAFF, S.staff, true);
-        await storageSet(K_PATIENTS, S.patients, true);
+        var ok1 = await storageSet(K_STAFF, S.staff, true);
+        var ok2 = await storageSet(K_PATIENTS, S.patients, true);
+        if(!ok1 || !ok2) return; // storageSet이 이미 실패 토스트를 띄웠으므로 여기서 멈춤
         if(S.who === name){
           S.who = "전체";
           await storageSet(K_LAST_NAME, S.who, false);
@@ -5689,9 +5741,9 @@
     if(!e) await lvSaveEmployees();
     if(!h) await lvSaveHolidays();
   }
-  async function lvSaveEmployees(){ await storageSet(K_LV_EMPLOYEES, LV_employees, true); }
-  async function lvSaveLedger(){ await storageSet(K_LV_LEDGER, LV_ledger, true); }
-  async function lvSaveHolidays(){ await storageSet(K_LV_HOLIDAYS, LV_holidays, true); }
+  async function lvSaveEmployees(){ return await storageSet(K_LV_EMPLOYEES, LV_employees, true); }
+  async function lvSaveLedger(){ return await storageSet(K_LV_LEDGER, LV_ledger, true); }
+  async function lvSaveHolidays(){ return await storageSet(K_LV_HOLIDAYS, LV_holidays, true); }
 
   // ---- 연차 발생 계산 (근로기준법 제60조 기준) ----
   function lvMonthsCompleted(hireISO, asOf){
@@ -5898,6 +5950,7 @@
 
   function lvOpenEmployee(id, opts){
     opts = opts || {};
+    if(LV_currentEmpId !== id) lvCancelCorrection();
     LV_currentEmpId = id;
     if(opts.switchTab !== false) lvActivateTab('employee');
     document.getElementById('lvEmpListWrap').style.display = "none";
@@ -5937,32 +5990,131 @@
     }
     var tbody = document.getElementById('lvTable');
     var rows = lvLedgerFor(emp.id);
-    tbody.innerHTML = rows.length ? rows.map(function(l){ return (
-      '<tr>' +
-        '<td><span class="lv-type-pill lv-pill-'+l.type.replace('조정','')+'">'+escapeHtml(l.type)+'</span></td>' +
-        '<td>'+(l.start? lvFmtKR(l.start) + (l.end && l.end!==l.start ? ' ~ '+lvFmtKR(l.end) : '') : '-')+'</td>' +
-        '<td>'+(l.days>0 && l.type==='연차조정' ? '+'+l.days : l.days)+'</td>' +
-        '<td>'+escapeHtml(l.note||'')+'</td>' +
-        '<td style="color:var(--lv-ink-soft);">'+lvFmtKR(l.createdAt)+'</td>' +
-        '<td><button class="lv-icon-btn" onclick="lvDeleteLedger(\''+l.id+'\')" aria-label="삭제">✕</button></td>' +
-      '</tr>'
-    ); }).join('') : '<tr class="lv-empty-row"><td colspan="6">등록된 기록이 없습니다.</td></tr>';
+    var correctedIds = {};
+    LV_ledger.forEach(function(l){ if(l.correctsId) correctedIds[l.correctsId] = true; });
+    tbody.innerHTML = rows.length ? rows.map(function(l){
+      var isCorrection = !!l.correctsId;
+      var alreadyCorrected = !!correctedIds[l.id];
+      var tag = isCorrection
+        ? ('<span class="lv-type-pill" style="background:#EDEAE0;color:var(--lv-ink-soft);margin-left:4px;">'+(l.correctionKind==='retract'?'회수':'정정')+'</span>')
+        : (alreadyCorrected ? '<span class="lv-type-pill" style="background:#EDEAE0;color:var(--lv-ink-soft);margin-left:4px;">정정/회수됨</span>' : '');
+      var daysDisplay = (l.days>0 && (l.type==='연차조정' || isCorrection)) ? '+'+l.days : l.days;
+      var actions = '';
+      if(!isCorrection){
+        actions += '<button class="lv-icon-btn" style="font-size:12px;color:var(--lv-teal-700);" onclick="lvStartCorrection(\''+l.id+'\')" aria-label="수정">수정</button>';
+      }
+      if(lvIsAdmin()){
+        actions += '<button class="lv-icon-btn" onclick="lvDeleteLedger(\''+l.id+'\')" aria-label="삭제">✕</button>';
+      }
+      return (
+        '<tr style="'+(alreadyCorrected?'opacity:.6;':'')+'">' +
+          '<td><span class="lv-type-pill lv-pill-'+l.type.replace('조정','')+'">'+escapeHtml(l.type)+'</span>'+tag+'</td>' +
+          '<td>'+(l.start? lvFmtKR(l.start) + (l.end && l.end!==l.start ? ' ~ '+lvFmtKR(l.end) : '') : '-')+'</td>' +
+          '<td>'+daysDisplay+'</td>' +
+          '<td>'+escapeHtml(l.note||'')+'</td>' +
+          '<td style="color:var(--lv-ink-soft);">'+lvFmtKR(l.createdAt)+'</td>' +
+          '<td style="white-space:nowrap;">'+actions+'</td>' +
+        '</tr>'
+      );
+    }).join('') : '<tr class="lv-empty-row"><td colspan="6">등록된 기록이 없습니다.</td></tr>';
   }
+
+  // ---- 정정/회수: 기존 기록을 직접 고치거나 지우지 않고, 차액만큼(또는 전액 취소)을
+  // 새 기록으로 얹어서 이력을 그대로 남깁니다. 관리자가 아니어도 본인 기록을 정정할 수 있습니다. ----
+  var LV_correctingId = null;
+  window.lvStartCorrection = function(id){
+    var orig = LV_ledger.find(function(l){ return l.id===id; });
+    if(!orig) return;
+    LV_correctingId = id;
+    document.getElementById('lvType').value = orig.type;
+    document.getElementById('lvType').disabled = true;
+    document.getElementById('lvStart').value = orig.start || "";
+    document.getElementById('lvEnd').value = orig.end || orig.start || "";
+    document.getElementById('lvDays').value = orig.days;
+    document.getElementById('lvNote').value = "";
+    document.getElementById('lvPanelTitle').textContent = "휴가·연차 기록 정정";
+    document.getElementById('lvAddBtn').textContent = "정정 내용 등록";
+    var banner = document.getElementById('lvCorrectionBanner');
+    banner.style.display = "";
+    banner.innerHTML = "원본 기록: "+(orig.start? lvFmtKR(orig.start):'')+" · "+orig.type+" "+orig.days+"일 ("+(orig.note||'메모 없음')+")을 정정합니다. 아래 값을 올바르게 고쳐서 \"정정 내용 등록\"을 누르면, 원본은 그대로 두고 차이만큼을 반영하는 기록이 한 줄 추가됩니다. 전체를 취소하려면 \"전체 회수\"를 눌러 주세요." +
+      '<div style="margin-top:8px;"><button class="lv-ghost" style="border-color:var(--lv-rose);color:var(--lv-rose);" onclick="lvRetractCorrection()">전체 회수</button>' +
+      '<button class="lv-ghost" style="margin-left:6px;" onclick="lvCancelCorrection()">취소</button></div>';
+    document.getElementById('lvMsg').textContent = "";
+  };
+  window.lvCancelCorrection = function(){
+    LV_correctingId = null;
+    var typeEl = document.getElementById('lvType');
+    if(typeEl) typeEl.disabled = false;
+    var titleEl = document.getElementById('lvPanelTitle');
+    if(titleEl) titleEl.textContent = "연차 사용 / 조정 기록 추가";
+    var btnEl = document.getElementById('lvAddBtn');
+    if(btnEl) btnEl.textContent = "기록 추가";
+    var bannerEl = document.getElementById('lvCorrectionBanner');
+    if(bannerEl) bannerEl.style.display = "none";
+    if(document.getElementById('lvStart')) document.getElementById('lvStart').value="";
+    if(document.getElementById('lvEnd')) document.getElementById('lvEnd').value="";
+    if(document.getElementById('lvDays')) document.getElementById('lvDays').value="";
+    if(document.getElementById('lvNote')) document.getElementById('lvNote').value="";
+    if(document.getElementById('lvMsg')) document.getElementById('lvMsg').textContent = "";
+  };
+  window.lvRetractCorrection = async function(){
+    var orig = LV_ledger.find(function(l){ return l.id===LV_correctingId; });
+    if(!orig) return;
+    LV_ledger.push({
+      id: "l"+Date.now(), employeeId: orig.employeeId, type: orig.type,
+      start: orig.start, end: orig.end, days: -Number(orig.days),
+      note: "[회수] "+(orig.start? lvFmtKR(orig.start)+' ':'')+orig.type+" "+orig.days+"일 등록분 회수",
+      createdAt: lvDateISO(LEAVE_TODAY), correctsId: orig.id, correctionKind: "retract"
+    });
+    var lvSavedRetract = await lvSaveLedger();
+    if(!lvSavedRetract){ LV_ledger.pop(); return; } // 저장 실패했으니 화면 상태도 되돌림 (실패 토스트는 이미 떠 있음)
+    lvCancelCorrection();
+    lvRenderEmployeeDetail(); lvRenderDashboard();
+  };
 
   document.getElementById('lvAddBtn').onclick = async function(){
     var type = document.getElementById('lvType').value;
     var start = document.getElementById('lvStart').value;
     var end = document.getElementById('lvEnd').value || start;
-    var days = document.getElementById('lvDays').value;
+    var daysInput = document.getElementById('lvDays').value;
     var note = document.getElementById('lvNote').value;
     var msg = document.getElementById('lvMsg');
     if(type!=="연차조정" && !start){ msg.textContent = "시작일을 입력해 주세요."; msg.className="lv-msg lv-err"; return; }
-    if(!days || Number(days)===0){ msg.textContent = "일수를 입력해 주세요 (조정의 경우 음수도 가능)."; msg.className="lv-msg lv-err"; return; }
+    if(!daysInput || Number(daysInput)===0){ msg.textContent = "일수를 입력해 주세요 (조정의 경우 음수도 가능)."; msg.className="lv-msg lv-err"; return; }
+
+    if(LV_correctingId){
+      var orig = LV_ledger.find(function(l){ return l.id===LV_correctingId; });
+      var newDays = Number(daysInput);
+      var delta = Math.round((newDays - Number(orig.days))*100)/100;
+      if(delta === 0){ msg.textContent = "원본과 값이 동일합니다. 변경할 내용을 고치거나 \"전체 회수\"를 이용해 주세요."; msg.className="lv-msg lv-err"; return; }
+      LV_ledger.push({
+        id: "l"+Date.now(), employeeId: LV_currentEmpId, type:type,
+        start: start||orig.start||null, end: end||orig.end||null, days: delta,
+        note: "[정정] "+(orig.start? lvFmtKR(orig.start)+' ':'')+"등록분 "+orig.days+"일 → "+newDays+"일로 수정"+(note? ' · '+note:''),
+        createdAt: lvDateISO(LEAVE_TODAY), correctsId: orig.id, correctionKind: "amend"
+      });
+      var lvSavedAmend = await lvSaveLedger();
+      if(!lvSavedAmend){
+        LV_ledger.pop();
+        msg.textContent = "저장에 실패했습니다. 다시 시도해주세요."; msg.className="lv-msg lv-err";
+        return;
+      }
+      lvCancelCorrection();
+      msg.textContent = "정정 내용이 등록되었습니다."; msg.className="lv-msg";
+      lvRenderEmployeeDetail(); lvRenderDashboard();
+      return;
+    }
+
     LV_ledger.push({
       id: "l"+Date.now(), employeeId: LV_currentEmpId, type:type, start: start||null, end: end||null,
-      days: Number(days), note:note, createdAt: lvDateISO(LEAVE_TODAY)
+      days: Number(daysInput), note:note, createdAt: lvDateISO(LEAVE_TODAY), correctsId: null
     });
-    await lvSaveLedger();
+    var lvSavedAdd = await lvSaveLedger();
+    if(!lvSavedAdd){
+      LV_ledger.pop(); // 저장 실패했으니 방금 추가한 항목은 화면 상태에서도 되돌림
+      msg.textContent = "저장에 실패했습니다. 다시 시도해주세요."; msg.className="lv-msg lv-err";
+      return;
+    }
     document.getElementById('lvStart').value=""; document.getElementById('lvEnd').value="";
     document.getElementById('lvDays').value=""; document.getElementById('lvNote').value="";
     msg.textContent = "기록이 추가되었습니다."; msg.className="lv-msg";
@@ -5970,8 +6122,11 @@
   };
 
   window.lvDeleteLedger = async function(id){
+    if(!lvIsAdmin()) return;
+    var backupLedger = LV_ledger.slice();
     LV_ledger = LV_ledger.filter(function(l){ return l.id!==id; });
-    await lvSaveLedger();
+    var lvSavedDel = await lvSaveLedger();
+    if(!lvSavedDel){ LV_ledger = backupLedger; return; }
     lvRenderEmployeeDetail(); lvRenderDashboard();
   };
 
@@ -6001,16 +6156,25 @@
     var msg = document.getElementById('lvStMsg');
     if(!name || !hire){ msg.textContent="이름과 근속 기산일은 필수입니다."; msg.className="lv-msg lv-err"; return; }
     LV_employees.push({id:"e"+Date.now(), name:name, type:type, hire:hire, end:end, note:note, active:true});
-    await lvSaveEmployees();
+    var lvSavedEmpAdd = await lvSaveEmployees();
+    if(!lvSavedEmpAdd){
+      LV_employees.pop();
+      msg.textContent = "저장에 실패했습니다. 다시 시도해주세요."; msg.className="lv-msg lv-err";
+      return;
+    }
     document.getElementById('lvStName').value=""; document.getElementById('lvStHire').value="";
     document.getElementById('lvStEnd').value=""; document.getElementById('lvStNote').value="";
     msg.textContent="직원이 추가되었습니다."; msg.className="lv-msg";
     lvRenderAll();
   };
   window.lvDeleteEmployee = async function(id){
+    var backupEmployees = LV_employees.slice();
+    var backupLedger2 = LV_ledger.slice();
     LV_employees = LV_employees.filter(function(e){ return e.id!==id; });
     LV_ledger = LV_ledger.filter(function(l){ return l.employeeId!==id; });
-    await lvSaveEmployees(); await lvSaveLedger();
+    var okEmp = await lvSaveEmployees();
+    var okLedger = okEmp ? await lvSaveLedger() : false;
+    if(!okEmp || !okLedger){ LV_employees = backupEmployees; LV_ledger = backupLedger2; return; }
     lvRenderAll();
   };
 
@@ -6073,7 +6237,12 @@
     }
 
     LV_holidays.push({id:"h"+Date.now(), date:date, name:name, type:type, startTime: startTime||null, endTime: endTime||null});
-    await lvSaveHolidays();
+    var lvSavedHoAdd = await lvSaveHolidays();
+    if(!lvSavedHoAdd){
+      LV_holidays.pop();
+      msg.textContent = "저장에 실패했습니다. 다시 시도해주세요."; msg.className="lv-msg lv-err";
+      return;
+    }
     document.getElementById('lvHoDate').value=""; document.getElementById('lvHoName').value="";
     document.getElementById('lvHoStart').value=""; document.getElementById('lvHoEnd').value="";
     document.getElementById('lvHoPeriod').value="종일";
@@ -6083,8 +6252,10 @@
     lvRenderHolidayTable(); lvRenderDashboard();
   };
   window.lvDeleteHoliday = async function(id){
+    var backupHolidays = LV_holidays.slice();
     LV_holidays = LV_holidays.filter(function(h){ return h.id!==id; });
-    await lvSaveHolidays();
+    var lvSavedHoDel = await lvSaveHolidays();
+    if(!lvSavedHoDel){ LV_holidays = backupHolidays; return; }
     lvRenderHolidayTable(); lvRenderDashboard();
   };
 
