@@ -1188,7 +1188,7 @@
       }catch(e){ return false; }
     }
     var mergeStrategy = getMergeStrategy(key);
-    if(mergeStrategy){ return await mergeSaveOne(key, value, mergeStrategy); }
+    if(mergeStrategy){ return await mergeSaveOneQueued(key, value, mergeStrategy); }
     try{
       var r = await apiCallWithRetry("kv_set", { key: key, value: JSON.stringify(value) });
       if(!r || !r.ok){
@@ -1201,6 +1201,19 @@
       showToast("저장에 실패했습니다. 인터넷 연결을 확인해주세요.");
       return false;
     }
+  }
+  // 체크박스처럼 짧은 시간 안에 같은 키(예: 체크상태 전체)를 연달아 저장할 때,
+  // 앞의 저장이 서버에 도착하기 전에 뒤의 저장이 먼저 도착해버리면, 나중에 처리되는
+  // "앞선 저장"이 그 사이 값을 못 보고 있던 오래된(stale) 스냅샷을 기준으로 합쳐지면서
+  // 방금 체크한 뒤의 항목을 되돌려버릴 수 있습니다(연달아 체크했는데 하나가 사라지는 원인).
+  // 이를 막기 위해 키별로 저장을 한 번에 하나씩만, 반드시 순서대로 서버에 보냅니다.
+  var SAVE_QUEUE = {};
+  function mergeSaveOneQueued(key, value, strategy){
+    var prev = SAVE_QUEUE[key] || Promise.resolve();
+    var next = prev.then(function(){ return mergeSaveOne(key, value, strategy); },
+                          function(){ return mergeSaveOne(key, value, strategy); });
+    SAVE_QUEUE[key] = next;
+    return next;
   }
   async function mergeSaveOne(key, value, strategy){
     try{
